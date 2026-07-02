@@ -1,0 +1,40 @@
+# Builda o app a cada push na main e publica o resultado (dist/) na branch
+# "hostinger". A Hostinger deve ser configurada para fazer deploy DESSA branch
+# (hPanel → Git), porque a hospedagem estática dela não roda o build do Vite.
+name: Build para Hostinger
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_N8N_NFE_WEBHOOK_URL: ${{ secrets.VITE_N8N_NFE_WEBHOOK_URL }}
+
+      - name: Publicar dist/ na branch hostinger
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: hostinger
+          publish_dir: ./dist
+          force_orphan: true
+          commit_message: 'Build de ${{ github.sha }}'
