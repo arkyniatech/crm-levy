@@ -62,6 +62,33 @@ export interface OrderItem {
   total_price: number | null
 }
 
+export interface WaConversation {
+  id: string
+  client_id: string
+  customer_id: string | null
+  wa_number: string
+  profile_name: string | null
+  status: string
+  last_message_at: string | null
+  last_inbound_at: string | null
+  created_at: string
+  customers?: { id: string; name: string | null } | null
+  wa_messages?: { body: string | null; created_at: string; direction: string }[]
+}
+
+export interface WaMessage {
+  id: string
+  conversation_id: string
+  direction: 'inbound' | 'outbound'
+  body: string | null
+  media_url: string | null
+  media_content_type: string | null
+  twilio_sid: string | null
+  status: string | null
+  error_code: string | null
+  created_at: string
+}
+
 /** Linha da tabela de clientes com agregados calculados a partir de orders */
 export interface CustomerWithStats extends Customer {
   orderCount: number

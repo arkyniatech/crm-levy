@@ -21,14 +21,12 @@ const NAV = [
   { to: '/', label: 'Visão Geral', icon: LayoutDashboard, end: true },
   { to: '/clientes', label: 'Clientes', icon: Users },
   { to: '/vendas', label: 'Vendas', icon: ShoppingCart },
+  { to: '/mensagens', label: 'Mensagens', icon: MessageSquare },
   { to: '/importar', label: 'Importar NF-e', icon: FileUp },
   { to: '/integracoes', label: 'Integrações', icon: Plug },
 ]
 
-const SOON = [
-  { label: 'Mensagens', icon: MessageSquare },
-  { label: 'Configurações', icon: Settings },
-]
+const SOON = [{ label: 'Configurações', icon: Settings }]
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { signOut, session } = useAuth()
