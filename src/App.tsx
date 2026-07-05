@@ -10,6 +10,7 @@ import Orders from './pages/Orders'
 import Integrations from './pages/Integrations'
 import ImportNfe from './pages/ImportNfe'
 import Messages from './pages/Messages'
+import Campaigns from './pages/Campaigns'
 
 function ProtectedRoutes() {
   const { session, loading } = useAuth()
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="/integracoes" element={<Integrations />} />
         <Route path="/importar" element={<ImportNfe />} />
         <Route path="/mensagens" element={<Messages />} />
+        <Route path="/campanhas" element={<Campaigns />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

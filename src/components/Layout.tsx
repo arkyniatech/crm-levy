@@ -7,6 +7,7 @@ import {
   Plug,
   FileUp,
   MessageSquare,
+  Megaphone,
   Settings,
   LogOut,
   Menu,
@@ -22,6 +23,7 @@ const NAV = [
   { to: '/clientes', label: 'Clientes', icon: Users },
   { to: '/vendas', label: 'Vendas', icon: ShoppingCart },
   { to: '/mensagens', label: 'Mensagens', icon: MessageSquare },
+  { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
   { to: '/importar', label: 'Importar NF-e', icon: FileUp },
   { to: '/integracoes', label: 'Integrações', icon: Plug },
 ]
