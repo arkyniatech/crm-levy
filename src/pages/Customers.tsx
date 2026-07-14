@@ -1,9 +1,59 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Search, Sparkles } from 'lucide-react'
 import { CUSTOMERS_PAGE_SIZE, useCustomers } from '../hooks/queries'
+import { enrichCustomers } from '../hooks/enrich'
 import { formatCurrency, formatDate, maskCpf } from '../lib/format'
 import { EmptyState, ErrorState, LoadingRows, PageHeader, Pagination } from '../components/ui'
+
+function EnrichControl() {
+  const [limit, setLimit] = useState(10)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
+  const queryClient = useQueryClient()
+
+  const run = async () => {
+    setBusy(true)
+    setMsg(null)
+    const res = await enrichCustomers(limit)
+    setBusy(false)
+    if (!res.ok) {
+      setMsg({ tone: 'err', text: res.error ?? 'Falha ao enriquecer.' })
+      return
+    }
+    setMsg({ tone: 'ok', text: `${res.enriquecidos} cliente(s) enriquecido(s) via NovaVida.` })
+    void queryClient.invalidateQueries({ queryKey: ['customers'] })
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input
+        type="number"
+        min={1}
+        max={500}
+        className="input w-20"
+        value={limit}
+        onChange={(e) => setLimit(Math.max(1, Number(e.target.value) || 1))}
+        aria-label="Quantos clientes enriquecer"
+        title="Quantos clientes buscar dados na NovaVida"
+      />
+      <button
+        type="button"
+        className="btn-primary shrink-0"
+        onClick={() => void run()}
+        disabled={busy}
+        title="Busca nome, telefone, e-mail e endereço pelo CPF (NovaVida)"
+      >
+        <Sparkles className="h-4 w-4" aria-hidden />
+        {busy ? 'Enriquecendo…' : 'Enriquecer dados'}
+      </button>
+      {msg && (
+        <span className={`text-xs ${msg.tone === 'ok' ? 'text-emerald-700' : 'text-red-700'}`}>{msg.text}</span>
+      )}
+    </div>
+  )
+}
 
 export default function Customers() {
   const [input, setInput] = useState('')
@@ -23,16 +73,19 @@ export default function Customers() {
   return (
     <div>
       <PageHeader title="Clientes" subtitle="Compradores identificados nos seus canais de venda">
-        <div className="relative w-full sm:w-72">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden />
-          <input
-            type="search"
-            className="input pl-9"
-            placeholder="Buscar por nome, CPF ou cidade…"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            aria-label="Buscar clientes"
-          />
+        <div className="flex flex-wrap items-center gap-3">
+          <EnrichControl />
+          <div className="relative w-full sm:w-72">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden />
+            <input
+              type="search"
+              className="input pl-9"
+              placeholder="Buscar por nome, CPF ou cidade…"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              aria-label="Buscar clientes"
+            />
+          </div>
         </div>
       </PageHeader>
 
