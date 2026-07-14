@@ -161,8 +161,7 @@ function NewCampaignForm({ onCreated }: { onCreated: () => void }) {
           onChange={(e) => setMessage(e.target.value)}
         />
         <span className="mt-1 block text-xs text-gray-500">
-          Com o número definitivo aprovado, campanhas fora da janela de 24h usarão templates aprovados pela
-          Meta — o texto daqui vira a base do template.
+          A mensagem sai pelo número de WhatsApp conectado no uazapi, como texto normal.
         </span>
       </label>
 
@@ -337,9 +336,9 @@ export default function Campaigns() {
 
       <p className="mt-6 flex items-start gap-2 text-xs text-gray-500">
         <Megaphone className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-        Quem responde SAIR, PARAR ou CANCELAR é excluído automaticamente das próximas campanhas. No
-        sandbox, as mensagens só chegam a números que entraram nele; o disparo em escala entra com o número
-        definitivo aprovado pela Meta.
+        Quem responde SAIR, PARAR ou CANCELAR é excluído automaticamente das próximas campanhas. O envio
+        usa ritmo espaçado e aleatório entre mensagens para proteger o número — em bases grandes, prefira
+        disparar em lotes ao longo do dia.
       </p>
     </div>
   )
