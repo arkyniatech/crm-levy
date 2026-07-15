@@ -12,7 +12,7 @@ export function useIsAdmin() {
     enabled: Boolean(userId),
     queryFn: async (): Promise<boolean> => {
       const { data, error } = await supabase
-        .from('user_roles')
+        .from('crm_user_roles')
         .select('role')
         .eq('user_id', userId!)
         .maybeSingle()
