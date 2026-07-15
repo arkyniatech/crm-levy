@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCheck, Copy, Eye, Megaphone, Pencil, Plus, Rocket, Trash2, Users, X } from 'lucide-react'
+import { Cake, CheckCheck, Copy, Eye, Megaphone, Pencil, Plus, Rocket, Trash2, Users, X } from 'lucide-react'
+import { useBirthdaySettings, useSaveBirthdaySettings } from '../hooks/settings'
 import {
   campaignAction,
   campaignCounts,
@@ -51,6 +52,96 @@ function parseTestNumbers(raw: string): string[] {
 }
 
 const SEGMENT_KEYS = SEGMENTS.map((s) => s.key)
+
+function BirthdayCard() {
+  const { data } = useBirthdaySettings()
+  const save = useSaveBirthdaySettings()
+  const [enabled, setEnabled] = useState(false)
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
+
+  useEffect(() => {
+    if (data) {
+      setEnabled(data.enabled)
+      setMessage(data.message)
+    }
+  }, [data])
+
+  const persist = async (next: { enabled: boolean; message: string }): Promise<boolean> => {
+    setBusy(true)
+    setMsg(null)
+    const res = await save(next)
+    setBusy(false)
+    if (!res.ok) {
+      setMsg({ tone: 'err', text: res.error ?? 'Falha ao salvar.' })
+      return false
+    }
+    return true
+  }
+
+  const toggle = async () => {
+    const next = !enabled
+    setEnabled(next)
+    const ok = await persist({ enabled: next, message })
+    if (ok) setMsg({ tone: 'ok', text: next ? 'Disparo de aniversário ativado.' : 'Disparo de aniversário desativado.' })
+    else setEnabled(!next)
+  }
+
+  const saveMessage = async () => {
+    if (await persist({ enabled, message })) setMsg({ tone: 'ok', text: 'Mensagem salva.' })
+  }
+
+  return (
+    <div className="card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 font-display text-sm font-semibold text-gray-900">
+            <Cake className="h-4 w-4 text-brand-600" aria-hidden /> Aniversariantes
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-500">
+            Quando ligado, envia a mensagem abaixo automaticamente para quem faz aniversário no dia.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="Ativar disparo de aniversário"
+          onClick={() => void toggle()}
+          disabled={busy}
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+            enabled ? 'bg-brand-600' : 'bg-gray-300'
+          } disabled:opacity-60`}
+        >
+          <span
+            className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+              enabled ? 'translate-x-5' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      <label className="mt-3 block">
+        <span className="text-sm font-medium text-gray-700">Mensagem de aniversário</span>
+        <textarea
+          className="input mt-1"
+          rows={3}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+        />
+      </label>
+      <div className="mt-2 flex items-center gap-2">
+        <button type="button" className="btn-primary !py-1.5" onClick={() => void saveMessage()} disabled={busy}>
+          {busy ? 'Salvando…' : 'Salvar mensagem'}
+        </button>
+        {msg && (
+          <span className={`text-xs ${msg.tone === 'ok' ? 'text-emerald-700' : 'text-red-700'}`}>{msg.text}</span>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?: CampaignPreset }) {
   const [name, setName] = useState('')
@@ -509,6 +600,10 @@ export default function Campaigns() {
         title="Campanhas"
         subtitle="Disparos de WhatsApp para grupos de clientes — com ritmo controlado e opt-out automático"
       />
+
+      <div className="mb-4">
+        <BirthdayCard />
+      </div>
 
       <NewCampaignForm onCreated={refresh} preset={preset} />
 
