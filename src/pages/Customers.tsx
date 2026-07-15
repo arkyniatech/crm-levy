@@ -2,10 +2,16 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Search, Sparkles } from 'lucide-react'
-import { CUSTOMERS_PAGE_SIZE, useCustomers } from '../hooks/queries'
+import { CUSTOMERS_PAGE_SIZE, useCustomers, type EnrichFilter } from '../hooks/queries'
 import { enrichCustomers } from '../hooks/enrich'
 import { formatCurrency, formatDate, maskCpf } from '../lib/format'
-import { EmptyState, ErrorState, LoadingRows, PageHeader, Pagination } from '../components/ui'
+import { EmptyState, ErrorState, LoadingRows, PageHeader, Pagination, StatusBadge } from '../components/ui'
+
+const TABS: { key: EnrichFilter; label: string }[] = [
+  { key: 'all', label: 'Todos' },
+  { key: 'pending', label: 'Pendentes' },
+  { key: 'enriched', label: 'Enriquecidos' },
+]
 
 function EnrichControl() {
   const [limit, setLimit] = useState(10)
@@ -55,11 +61,18 @@ function EnrichControl() {
   )
 }
 
+function WaBadge({ status }: { status: 'respondeu' | 'enviada' | 'nenhuma' }) {
+  if (status === 'respondeu') return <StatusBadge status="Respondeu" tone="ok" />
+  if (status === 'enviada') return <StatusBadge status="Msg enviada" tone="neutral" />
+  return <span className="text-gray-300">—</span>
+}
+
 export default function Customers() {
   const [input, setInput] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
-  const { data, isLoading, error, isFetching } = useCustomers(search, page)
+  const [tab, setTab] = useState<EnrichFilter>('all')
+  const { data, isLoading, error, isFetching } = useCustomers(search, page, tab)
 
   // debounce da busca
   useEffect(() => {
@@ -91,6 +104,26 @@ export default function Customers() {
 
       {error && <ErrorState message={(error as Error).message} />}
 
+      <div className="mb-4 flex gap-1 border-b border-gray-200">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => {
+              setTab(t.key)
+              setPage(0)
+            }}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+              tab === t.key
+                ? 'border-brand-600 text-brand-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <div className={`card overflow-hidden ${isFetching && !isLoading ? 'opacity-70' : ''}`}>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -99,6 +132,7 @@ export default function Customers() {
                 <th className="th">Nome</th>
                 <th className="th">CPF</th>
                 <th className="th">Cidade/UF</th>
+                <th className="th">Status</th>
                 <th className="th text-right">Pedidos</th>
                 <th className="th text-right">Total gasto</th>
                 <th className="th">Última compra</th>
@@ -107,7 +141,7 @@ export default function Customers() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
-                <LoadingRows cols={7} />
+                <LoadingRows cols={8} />
               ) : (
                 data?.customers.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50">
@@ -118,6 +152,16 @@ export default function Customers() {
                     </td>
                     <td className="td tabular-nums">{maskCpf(c.cpf)}</td>
                     <td className="td">{[c.city, c.state].filter(Boolean).join('/') || '—'}</td>
+                    <td className="td">
+                      <div className="flex flex-wrap items-center gap-1">
+                        {c.enriched ? (
+                          <StatusBadge status="Enriquecido" tone="ok" />
+                        ) : (
+                          <StatusBadge status="Pendente" tone="warn" />
+                        )}
+                        <WaBadge status={c.waStatus} />
+                      </div>
+                    </td>
                     <td className="td text-right tabular-nums">
                       {c.orderCount > 0 ? (
                         <Link
@@ -147,11 +191,21 @@ export default function Customers() {
 
         {!isLoading && data?.customers.length === 0 && (
           <EmptyState
-            title={search ? `Nenhum cliente encontrado para "${search}"` : 'Nenhum cliente ainda'}
+            title={
+              search
+                ? `Nenhum cliente encontrado para "${search}"`
+                : tab === 'pending'
+                  ? 'Nenhum cliente pendente'
+                  : tab === 'enriched'
+                    ? 'Nenhum cliente enriquecido ainda'
+                    : 'Nenhum cliente ainda'
+            }
             hint={
               search
                 ? 'Tente outro nome, CPF ou cidade.'
-                : 'Os clientes aparecem aqui conforme os pedidos são importados dos marketplaces.'
+                : tab === 'enriched'
+                  ? 'Use "Enriquecer dados" para buscar telefone, e-mail e endereço na NovaVida.'
+                  : 'Os clientes aparecem aqui conforme as NF-e são importadas.'
             }
           />
         )}

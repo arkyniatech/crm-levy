@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { fetchAllRows } from '../lib/fetchAll'
 import { isCancelledStatus } from '../lib/format'
 import { useCompany } from '../context/CompanyContext'
-import type { Customer, CustomerWithStats, Order, OrderItem, Store } from '../types'
+import type { Customer, CustomerWithStats, Order, OrderItem, Store, WaOutreach } from '../types'
 
 /** Lojas (stores) da empresa ativa — base para escopar orders por client_id */
 export function useStores() {
@@ -164,10 +164,13 @@ export function useDashboard(period: Period) {
 
 export const CUSTOMERS_PAGE_SIZE = 25
 
-export function useCustomers(search: string, page: number) {
+/** Filtro de enriquecimento usado nas abas da tela Clientes */
+export type EnrichFilter = 'all' | 'pending' | 'enriched'
+
+export function useCustomers(search: string, page: number, enrichFilter: EnrichFilter = 'all') {
   const { activeClient } = useCompany()
   return useQuery({
-    queryKey: ['customers', activeClient?.id, search, page],
+    queryKey: ['customers', activeClient?.id, search, page, enrichFilter],
     enabled: Boolean(activeClient),
     placeholderData: (prev) => prev,
     queryFn: async () => {
@@ -178,6 +181,9 @@ export function useCustomers(search: string, page: number) {
         .eq('client_id', activeClient!.id)
         .order('created_at', { ascending: false })
         .range(from, from + CUSTOMERS_PAGE_SIZE - 1)
+      // Abas: pendente = ainda sem enriched_at; enriquecido = já processado
+      if (enrichFilter === 'pending') q = q.filter('extra->>enriched_at', 'is', null)
+      else if (enrichFilter === 'enriched') q = q.not('extra->>enriched_at', 'is', null)
       const term = search.trim()
       if (term) {
         const like = `%${term}%`
@@ -193,6 +199,8 @@ export function useCustomers(search: string, page: number) {
       // Agregados de pedidos só para os clientes da página atual
       const ids = customers.map((c) => c.id)
       const stats = new Map<string, { orderCount: number; totalSpent: number; lastOrderAt: string | null }>()
+      const sentIds = new Set<string>() // já receberam disparo de campanha
+      const repliedIds = new Set<string>() // já responderam no WhatsApp
       if (ids.length > 0) {
         const rows = await fetchAllRows<{ customer_id: string; total_amount: number | null; ordered_at: string | null; status: string | null }>(
           (f, t) =>
@@ -210,14 +218,56 @@ export function useCustomers(search: string, page: number) {
           if (r.ordered_at && (!cur.lastOrderAt || r.ordered_at > cur.lastOrderAt)) cur.lastOrderAt = r.ordered_at
           stats.set(r.customer_id, cur)
         }
+
+        // Situação de WhatsApp — derivada das tabelas wa_.
+        // Envolto em try/catch: se as tabelas wa_ ainda não existem, a lista de
+        // clientes continua funcionando (apenas sem os selos de WhatsApp).
+        try {
+          const recips = await fetchAllRows<{ customer_id: string | null; status: string | null }>(
+            (f, t) =>
+              supabase
+                .from('wa_campaign_recipients')
+                .select('customer_id, status')
+                .in('customer_id', ids)
+                .range(f, t),
+          )
+          for (const r of recips) {
+            if (r.customer_id && ['sent', 'delivered', 'read'].includes((r.status ?? '').toLowerCase())) {
+              sentIds.add(r.customer_id)
+            }
+          }
+        } catch {
+          /* tabelas wa_ ausentes — ignora */
+        }
+        try {
+          const convs = await fetchAllRows<{ customer_id: string | null; last_inbound_at: string | null }>(
+            (f, t) =>
+              supabase
+                .from('wa_conversations')
+                .select('customer_id, last_inbound_at')
+                .in('customer_id', ids)
+                .range(f, t),
+          )
+          for (const c of convs) {
+            if (c.customer_id && c.last_inbound_at) repliedIds.add(c.customer_id)
+          }
+        } catch {
+          /* tabelas wa_ ausentes — ignora */
+        }
       }
 
-      const withStats: CustomerWithStats[] = customers.map((c) => ({
-        ...c,
-        orderCount: stats.get(c.id)?.orderCount ?? 0,
-        totalSpent: stats.get(c.id)?.totalSpent ?? 0,
-        lastOrderAt: stats.get(c.id)?.lastOrderAt ?? null,
-      }))
+      const withStats: CustomerWithStats[] = customers.map((c) => {
+        const enriched = Boolean(c.extra && (c.extra as Record<string, unknown>).enriched_at)
+        const waStatus: WaOutreach = repliedIds.has(c.id) ? 'respondeu' : sentIds.has(c.id) ? 'enviada' : 'nenhuma'
+        return {
+          ...c,
+          orderCount: stats.get(c.id)?.orderCount ?? 0,
+          totalSpent: stats.get(c.id)?.totalSpent ?? 0,
+          lastOrderAt: stats.get(c.id)?.lastOrderAt ?? null,
+          enriched,
+          waStatus,
+        }
+      })
       return { customers: withStats, total: count ?? 0 }
     },
   })

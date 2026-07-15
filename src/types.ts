@@ -31,6 +31,7 @@ export interface Customer {
   state: string | null
   first_seen_at: string | null
   created_at: string | null
+  extra: Record<string, unknown> | null
 }
 
 export interface Order {
@@ -62,9 +63,16 @@ export interface OrderItem {
   total_price: number | null
 }
 
+/** Estágio de abordagem por WhatsApp, derivado das tabelas wa_ */
+export type WaOutreach = 'respondeu' | 'enviada' | 'nenhuma'
+
 /** Linha da tabela de clientes com agregados calculados a partir de orders */
 export interface CustomerWithStats extends Customer {
   orderCount: number
   totalSpent: number
   lastOrderAt: string | null
+  /** true quando o enriquecimento NovaVida já rodou (extra.enriched_at preenchido) */
+  enriched: boolean
+  /** situação da abordagem por WhatsApp (campanhas + conversas) */
+  waStatus: WaOutreach
 }
