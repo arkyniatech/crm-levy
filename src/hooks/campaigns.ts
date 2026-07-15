@@ -9,7 +9,14 @@ export interface WaCampaign {
   client_id: string
   name: string
   message_body: string
-  audience: { type?: string; segment?: string; days?: number; min_spent?: number; numbers?: string[] }
+  audience: {
+    type?: string
+    segment?: string
+    days?: number
+    min_spent?: number
+    numbers?: string[]
+    customer_ids?: string[]
+  }
   status: string
   started_at: string | null
   finished_at: string | null
@@ -59,11 +66,12 @@ export function useWaCampaigns() {
 }
 
 export interface AudienceInput {
-  type: 'test' | 'all' | 'recent' | 'segment'
+  type: 'test' | 'all' | 'recent' | 'segment' | 'manual'
   segment?: 'one_time' | 'recorrente' | 'vip' | 'inactive' | 'birthday'
   days?: number
   min_spent?: number
   numbers?: string[]
+  customer_ids?: string[]
 }
 
 interface CampaignActionResponse {

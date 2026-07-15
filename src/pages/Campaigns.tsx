@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Cake, CheckCheck, Copy, Eye, Megaphone, Pencil, Plus, Rocket, Trash2, Users, X } from 'lucide-react'
+import { Cake, CheckCheck, Copy, Eye, Megaphone, Pencil, Plus, Rocket, Search, Trash2, Users, X } from 'lucide-react'
 import { useBirthdaySettings, useSaveBirthdaySettings } from '../hooks/settings'
 import {
   campaignAction,
@@ -12,8 +12,9 @@ import {
   type AudienceInput,
   type WaCampaign,
 } from '../hooks/campaigns'
+import { useCustomerSearch, type CustomerLite } from '../hooks/queries'
 import { SEGMENTS, segmentLabel } from '../lib/segments'
-import { formatDateTime } from '../lib/format'
+import { formatDateTime, formatPhone, maskCpf } from '../lib/format'
 import { EmptyState, ErrorState, PageHeader, StatusBadge } from '../components/ui'
 
 const STATUS_LABEL: Record<string, { label: string; tone: 'ok' | 'warn' | 'bad' | 'neutral' }> = {
@@ -32,6 +33,7 @@ const AUDIENCE_LABEL: Record<string, string> = {
 
 function audienceDescription(a: WaCampaign['audience']): string {
   if (a?.type === 'segment') return `Segmento: ${segmentLabel(a.segment ?? '')}`
+  if (a?.type === 'manual') return `Clientes selecionados (${(a.customer_ids ?? []).length})`
   return AUDIENCE_LABEL[a?.type ?? ''] ?? 'Público personalizado'
 }
 
@@ -42,7 +44,100 @@ interface CampaignPreset {
 }
 
 /** valores possíveis do seletor de público (inclui os segmentos) */
-type AudienceChoice = 'test' | 'all' | 'recent' | AudienceInput['segment']
+type AudienceChoice = 'test' | 'all' | 'recent' | 'manual' | AudienceInput['segment']
+
+function CustomerPicker({
+  selected,
+  onChange,
+}: {
+  selected: CustomerLite[]
+  onChange: (list: CustomerLite[]) => void
+}) {
+  const [term, setTerm] = useState('')
+  const [debounced, setDebounced] = useState('')
+  const { data: results = [], isFetching } = useCustomerSearch(debounced)
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(term), 300)
+    return () => clearTimeout(t)
+  }, [term])
+
+  const selectedIds = new Set(selected.map((s) => s.id))
+  const add = (c: CustomerLite) => {
+    if (!selectedIds.has(c.id)) onChange([...selected, c])
+    setTerm('')
+    setDebounced('')
+  }
+  const remove = (id: string) => onChange(selected.filter((s) => s.id !== id))
+
+  return (
+    <div className="mt-3">
+      <span className="text-sm font-medium text-gray-700">Clientes selecionados</span>
+
+      {selected.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {selected.map((c) => (
+            <span
+              key={c.id}
+              className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-xs text-brand-700"
+            >
+              {c.name || 'Sem nome'}
+              {!c.phone && (
+                <span className="text-amber-600" title="Sem telefone — será ignorado no disparo">
+                  ⚠
+                </span>
+              )}
+              <button type="button" onClick={() => remove(c.id)} aria-label="Remover">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="relative mt-2">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden />
+        <input
+          className="input pl-9"
+          placeholder="Buscar por nome ou CPF…"
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+        />
+      </div>
+
+      {debounced.length >= 2 && (
+        <div className="mt-1 max-h-56 overflow-y-auto rounded-md border border-gray-200">
+          {isFetching && <p className="px-3 py-2 text-xs text-gray-400">Buscando…</p>}
+          {!isFetching && results.length === 0 && (
+            <p className="px-3 py-2 text-xs text-gray-400">Nenhum cliente encontrado.</p>
+          )}
+          {results
+            .filter((c) => !selectedIds.has(c.id))
+            .map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => add(c)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-gray-50"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-medium text-gray-800">{c.name || 'Sem nome'}</span>
+                  <span className="text-xs text-gray-400">{maskCpf(c.cpf)}</span>
+                </span>
+                <span className="shrink-0 text-xs tabular-nums text-gray-500">
+                  {c.phone ? formatPhone(c.phone) : <span className="text-amber-600">sem telefone</span>}
+                </span>
+              </button>
+            ))}
+        </div>
+      )}
+
+      <p className="mt-1 text-xs text-gray-500">
+        {selected.length} selecionado(s). Quem não tem telefone é ignorado no disparo.
+      </p>
+    </div>
+  )
+}
 
 function parseTestNumbers(raw: string): string[] {
   return raw
@@ -150,6 +245,7 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
   const [days, setDays] = useState(90)
   const [minSpent, setMinSpent] = useState(300)
   const [testNumbers, setTestNumbers] = useState('')
+  const [selected, setSelected] = useState<CustomerLite[]>([])
   const [preview, setPreview] = useState<{ total: number; skipped: number; sample: string[] } | null>(null)
   const [busy, setBusy] = useState<'preview' | 'create' | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -172,6 +268,7 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
     if (choice === 'test') return { type: 'test', numbers: parseTestNumbers(testNumbers) }
     if (choice === 'recent') return { type: 'recent', days }
     if (choice === 'all') return { type: 'all' }
+    if (choice === 'manual') return { type: 'manual', customer_ids: selected.map((s) => s.id) }
     // segmentos
     return { type: 'segment', segment: choice, days, min_spent: minSpent }
   }
@@ -198,6 +295,10 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
       setError('Dê um nome e escreva a mensagem da campanha.')
       return
     }
+    if (choice === 'manual' && selected.length === 0) {
+      setError('Selecione ao menos 1 cliente.')
+      return
+    }
     setBusy('create')
     setError(null)
     const res = await campaignAction({
@@ -214,6 +315,7 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
     setName('')
     setMessage('')
     setTestNumbers('')
+    setSelected([])
     setChoice('test')
     setPreview(null)
     onCreated()
@@ -248,6 +350,7 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
           >
             <optgroup label="Básico">
               <option value="test">Números de teste (recomendado antes de disparar de verdade)</option>
+              <option value="manual">Clientes selecionados (escolher na mão)</option>
               <option value="all">Todos os clientes com telefone</option>
               <option value="recent">Compradores dos últimos X dias</option>
             </optgroup>
@@ -306,6 +409,7 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
           O público é recalculado no momento do disparo, a partir dos pedidos e dados dos clientes.
         </p>
       )}
+      {choice === 'manual' && <CustomerPicker selected={selected} onChange={setSelected} />}
 
       <label className="mt-3 block">
         <span className="text-sm font-medium text-gray-700">Mensagem</span>

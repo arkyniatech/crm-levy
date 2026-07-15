@@ -406,6 +406,38 @@ export interface OrderWithItems extends Order {
   stores: { name: string | null; marketplace: string } | null
 }
 
+export interface CustomerLite {
+  id: string
+  name: string | null
+  cpf: string | null
+  phone: string | null
+}
+
+/** Busca rápida de clientes por nome/CPF (para o seletor de campanha). */
+export function useCustomerSearch(term: string) {
+  const { activeClient } = useCompany()
+  const q = term.trim()
+  return useQuery({
+    queryKey: ['customer-search', activeClient?.id, q],
+    enabled: Boolean(activeClient) && q.length >= 2,
+    queryFn: async (): Promise<CustomerLite[]> => {
+      const like = `%${q}%`
+      const digits = q.replace(/\D/g, '')
+      const filters = [`name.ilike.${like}`]
+      if (digits) filters.push(`cpf.ilike.%${digits}%`)
+      const { data, error } = await supabase
+        .from('customers')
+        .select('id, name, cpf, phone')
+        .eq('client_id', activeClient!.id)
+        .or(filters.join(','))
+        .order('name', { ascending: true })
+        .limit(12)
+      if (error) throw new Error(error.message)
+      return (data ?? []) as CustomerLite[]
+    },
+  })
+}
+
 export function useCustomerDetail(customerId: string | undefined) {
   const { activeClient } = useCompany()
   return useQuery({
