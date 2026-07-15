@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { fetchAllRows } from '../lib/fetchAll'
 import { isCancelledStatus } from '../lib/format'
@@ -160,6 +160,45 @@ export function useDashboard(period: Period) {
       }
     },
   })
+}
+
+export interface NewCustomerInput {
+  name: string
+  cpf?: string
+  phone?: string
+  email?: string
+  city?: string
+  state?: string
+  birth_date?: string
+}
+
+/** Cadastra um cliente manualmente (marcado com extra.source = 'manual'). */
+export function useAddCustomer() {
+  const { activeClient } = useCompany()
+  const queryClient = useQueryClient()
+  return async (input: NewCustomerInput): Promise<{ ok: boolean; error?: string; id?: string }> => {
+    if (!activeClient) return { ok: false, error: 'Empresa não carregada.' }
+    const cpf = (input.cpf || '').replace(/\D/g, '')
+    const row = {
+      client_id: activeClient.id,
+      name: input.name.trim() || null,
+      cpf: cpf.length === 11 ? cpf : null,
+      phone: input.phone || null,
+      email: input.email?.trim().toLowerCase() || null,
+      city: input.city?.trim() || null,
+      state: input.state?.trim().toUpperCase() || null,
+      birth_date: input.birth_date || null,
+      extra: { source: 'manual' },
+    }
+    const { data, error } = await supabase.from('customers').insert(row).select('id').single()
+    if (error) {
+      const msg = error.code === '23505' ? 'Já existe um cliente com esse CPF.' : error.message
+      return { ok: false, error: msg }
+    }
+    void queryClient.invalidateQueries({ queryKey: ['customers'] })
+    void queryClient.invalidateQueries({ queryKey: ['outreach-stats'] })
+    return { ok: true, id: data?.id }
+  }
 }
 
 export interface OutreachStats {

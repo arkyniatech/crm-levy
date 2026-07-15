@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ChangeEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Search, Sparkles } from 'lucide-react'
+import { Search, Sparkles, UserPlus, X } from 'lucide-react'
 import {
   CUSTOMERS_PAGE_SIZE,
+  useAddCustomer,
   useCustomers,
   useOutreachStats,
   type ContactFilter,
@@ -11,7 +12,7 @@ import {
 } from '../hooks/queries'
 import { enrichCustomers } from '../hooks/enrich'
 import { useEnrichmentCredits, useSpendCredits } from '../hooks/settings'
-import { formatCurrency, formatDate, formatPhone, maskCpf } from '../lib/format'
+import { formatCurrency, formatDate, formatPhone, maskCpf, toE164 } from '../lib/format'
 import { EmptyState, ErrorState, LoadingRows, PageHeader, Pagination, StatusBadge } from '../components/ui'
 
 const TABS: { key: EnrichFilter; label: string }[] = [
@@ -95,6 +96,115 @@ function initials(name: string | null): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
+function NewCustomerModal({ onClose }: { onClose: () => void }) {
+  const add = useAddCustomer()
+  const [form, setForm] = useState({ name: '', cpf: '', phone: '', email: '', city: '', state: '', birth_date: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const set = (k: keyof typeof form) => (e: ChangeEvent<HTMLInputElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  const submit = async () => {
+    if (!form.name.trim()) {
+      setError('Informe o nome.')
+      return
+    }
+    let phone: string | undefined
+    if (form.phone.trim()) {
+      const e164 = toE164(form.phone)
+      if (!e164) {
+        setError('Telefone inválido. Use DDD + número.')
+        return
+      }
+      phone = e164
+    }
+    setSaving(true)
+    setError(null)
+    const res = await add({
+      name: form.name,
+      cpf: form.cpf || undefined,
+      phone,
+      email: form.email || undefined,
+      city: form.city || undefined,
+      state: form.state || undefined,
+      birth_date: form.birth_date || undefined,
+    })
+    setSaving(false)
+    if (!res.ok) {
+      setError(res.error ?? 'Falha ao salvar.')
+      return
+    }
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 font-display text-base font-semibold text-gray-900">
+            <UserPlus className="h-4 w-4 text-brand-600" aria-hidden /> Novo cliente
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-gray-400 hover:bg-gray-100"
+            aria-label="Fechar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block sm:col-span-2">
+            <span className="text-sm font-medium text-gray-700">Nome *</span>
+            <input className="input mt-1" value={form.name} onChange={set('name')} autoFocus />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">CPF</span>
+            <input className="input mt-1" value={form.cpf} onChange={set('cpf')} placeholder="000.000.000-00" />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Telefone</span>
+            <input className="input mt-1" value={form.phone} onChange={set('phone')} placeholder="(11) 99999-8888" />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="text-sm font-medium text-gray-700">E-mail</span>
+            <input className="input mt-1" type="email" value={form.email} onChange={set('email')} />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Cidade</span>
+            <input className="input mt-1" value={form.city} onChange={set('city')} />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">UF</span>
+            <input className="input mt-1" maxLength={2} value={form.state} onChange={set('state')} placeholder="SP" />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Nascimento</span>
+            <input className="input mt-1" type="date" value={form.birth_date} onChange={set('birth_date')} />
+          </label>
+        </div>
+
+        {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            onClick={onClose}
+          >
+            Cancelar
+          </button>
+          <button type="button" className="btn-primary" onClick={() => void submit()} disabled={saving}>
+            {saving ? 'Salvando…' : 'Salvar cliente'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function WaBadge({ status }: { status: 'respondeu' | 'enviada' | 'nenhuma' }) {
   if (status === 'respondeu') return <StatusBadge status="Respondeu" tone="ok" />
   if (status === 'enviada') return <StatusBadge status="Msg enviada" tone="neutral" />
@@ -108,6 +218,7 @@ export default function Customers() {
   const [tab, setTab] = useState<EnrichFilter>('pending')
   const [tabTouched, setTabTouched] = useState(false)
   const [contact, setContact] = useState<ContactFilter>('all')
+  const [showAdd, setShowAdd] = useState(false)
   const navigate = useNavigate()
   const { data, isLoading, error, isFetching } = useCustomers(search, page, tab, contact)
   const { data: stats } = useOutreachStats()
@@ -139,6 +250,14 @@ export default function Customers() {
     <div>
       <PageHeader title="Clientes" subtitle="Compradores identificados nos seus canais de venda">
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            onClick={() => setShowAdd(true)}
+          >
+            <UserPlus className="h-4 w-4 text-brand-600" aria-hidden />
+            Novo cliente
+          </button>
           <EnrichControl />
           <div className="relative w-full sm:w-72">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden />
@@ -307,6 +426,8 @@ export default function Customers() {
           onPageChange={setPage}
         />
       </div>
+
+      {showAdd && <NewCustomerModal onClose={() => setShowAdd(false)} />}
     </div>
   )
 }

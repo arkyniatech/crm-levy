@@ -25,6 +25,19 @@ export function formatPhone(phone: string | null | undefined): string {
   return phone
 }
 
+/** Normaliza um telefone digitado para E.164 BR (+55...). Retorna null se inválido. */
+export function toE164(phone: string | null | undefined): string | null {
+  if (!phone) return null
+  let d = String(phone).replace(/\D/g, '')
+  if (!d) return null
+  if (!d.startsWith('55')) {
+    if (d.length > 11) return null
+    d = '55' + d
+  }
+  if (d.length < 12 || d.length > 13) return null
+  return '+' + d
+}
+
 export function formatCurrency(value: number | null | undefined, currency = 'BRL'): string {
   if (value == null || Number.isNaN(value)) return '—'
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value)
