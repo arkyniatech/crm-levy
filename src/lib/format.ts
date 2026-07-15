@@ -15,6 +15,16 @@ export function maskCpf(cpf: string | null | undefined): string {
   return `${digits.slice(0, 3)}.***.***-${digits.slice(9)}`
 }
 
+/** Formata telefone E.164/BR para exibição, ex.: +5511973036648 → (11) 97303-6648 */
+export function formatPhone(phone: string | null | undefined): string {
+  if (!phone) return ''
+  const d = String(phone).replace(/\D/g, '')
+  const n = d.startsWith('55') && d.length > 11 ? d.slice(2) : d
+  if (n.length === 11) return `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}`
+  if (n.length === 10) return `(${n.slice(0, 2)}) ${n.slice(2, 6)}-${n.slice(6)}`
+  return phone
+}
+
 export function formatCurrency(value: number | null | undefined, currency = 'BRL'): string {
   if (value == null || Number.isNaN(value)) return '—'
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value)

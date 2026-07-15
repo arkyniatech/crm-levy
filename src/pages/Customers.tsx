@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Search, Sparkles } from 'lucide-react'
 import { CUSTOMERS_PAGE_SIZE, useCustomers, type EnrichFilter } from '../hooks/queries'
 import { enrichCustomers } from '../hooks/enrich'
-import { formatCurrency, formatDate, maskCpf } from '../lib/format'
+import { formatCurrency, formatDate, formatPhone, maskCpf } from '../lib/format'
 import { EmptyState, ErrorState, LoadingRows, PageHeader, Pagination, StatusBadge } from '../components/ui'
 
 const TABS: { key: EnrichFilter; label: string }[] = [
@@ -58,6 +58,13 @@ function EnrichControl() {
       )}
     </div>
   )
+}
+
+function initials(name: string | null): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 function WaBadge({ status }: { status: 'respondeu' | 'enviada' | 'nenhuma' }) {
@@ -128,8 +135,8 @@ export default function Customers() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="th">Nome</th>
-                <th className="th">CPF</th>
+                <th className="th">Cliente</th>
+                <th className="th">Contato</th>
                 <th className="th">Cidade/UF</th>
                 <th className="th">Status</th>
                 <th className="th text-right">Pedidos</th>
@@ -145,11 +152,33 @@ export default function Customers() {
                 data?.customers.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50">
                     <td className="td">
-                      <Link to={`/clientes/${c.id}`} className="font-medium text-brand-700 hover:underline">
-                        {c.name || 'Sem nome'}
-                      </Link>
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">
+                          {initials(c.name)}
+                        </span>
+                        <div className="min-w-0">
+                          <Link
+                            to={`/clientes/${c.id}`}
+                            className="block truncate font-medium text-gray-900 hover:text-brand-700 hover:underline"
+                          >
+                            {c.name || 'Sem nome'}
+                          </Link>
+                          <span className="text-xs tabular-nums text-gray-400">{maskCpf(c.cpf)}</span>
+                        </div>
+                      </div>
                     </td>
-                    <td className="td tabular-nums">{maskCpf(c.cpf)}</td>
+                    <td className="td">
+                      {c.phone ? (
+                        <span className="tabular-nums text-gray-700">{formatPhone(c.phone)}</span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                      {c.email && (
+                        <div className="max-w-[180px] truncate text-xs text-gray-400" title={c.email}>
+                          {c.email}
+                        </div>
+                      )}
+                    </td>
                     <td className="td">{[c.city, c.state].filter(Boolean).join('/') || '—'}</td>
                     <td className="td">
                       <div className="flex flex-wrap items-center gap-1">
