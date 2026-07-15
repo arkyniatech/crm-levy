@@ -162,6 +162,85 @@ export function useDashboard(period: Period) {
   })
 }
 
+export interface OutreachStats {
+  total: number
+  enriched: number
+  withPhone: number
+  campaigns: number
+  messagesSent: number
+  delivered: number
+  replied: number
+}
+
+/** Métricas de base (enriquecimento) e de WhatsApp (campanhas/conversas) para o Dashboard. */
+export function useOutreachStats() {
+  const { activeClient } = useCompany()
+  return useQuery({
+    queryKey: ['outreach-stats', activeClient?.id],
+    enabled: Boolean(activeClient),
+    queryFn: async (): Promise<OutreachStats> => {
+      const clientId = activeClient!.id
+      const [totalRes, enrichedRes, phoneRes] = await Promise.all([
+        supabase.from('customers').select('id', { count: 'exact', head: true }).eq('client_id', clientId),
+        supabase
+          .from('customers')
+          .select('id', { count: 'exact', head: true })
+          .eq('client_id', clientId)
+          .not('extra->>enriched_at', 'is', null),
+        supabase
+          .from('customers')
+          .select('id', { count: 'exact', head: true })
+          .eq('client_id', clientId)
+          .not('phone', 'is', null),
+      ])
+      for (const res of [totalRes, enrichedRes, phoneRes]) {
+        if (res.error) throw new Error(res.error.message)
+      }
+
+      // WhatsApp — resiliente caso as tabelas wa_ não existam
+      let campaigns = 0
+      let messagesSent = 0
+      let delivered = 0
+      let replied = 0
+      try {
+        const { data } = await supabase
+          .from('wa_campaigns')
+          .select('id, wa_campaign_recipients(status)')
+          .eq('client_id', clientId)
+        const camps = (data ?? []) as { wa_campaign_recipients?: { status: string }[] }[]
+        campaigns = camps.length
+        for (const c of camps) {
+          for (const r of c.wa_campaign_recipients ?? []) {
+            if (r.status === 'sent') messagesSent += 1
+            else if (r.status === 'delivered' || r.status === 'read') {
+              messagesSent += 1
+              delivered += 1
+            }
+          }
+        }
+        const conv = await supabase
+          .from('wa_conversations')
+          .select('id', { count: 'exact', head: true })
+          .eq('client_id', clientId)
+          .not('last_inbound_at', 'is', null)
+        replied = conv.count ?? 0
+      } catch {
+        /* tabelas wa_ ausentes — mantém zeros */
+      }
+
+      return {
+        total: totalRes.count ?? 0,
+        enriched: enrichedRes.count ?? 0,
+        withPhone: phoneRes.count ?? 0,
+        campaigns,
+        messagesSent,
+        delivered,
+        replied,
+      }
+    },
+  })
+}
+
 export const CUSTOMERS_PAGE_SIZE = 25
 
 /** Filtro de enriquecimento usado nas abas da tela Clientes */

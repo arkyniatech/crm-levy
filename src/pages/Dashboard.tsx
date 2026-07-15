@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Users, UserPlus, Repeat, Wallet } from 'lucide-react'
-import { useDashboard, type Period } from '../hooks/queries'
+import { Users, UserPlus, Repeat, Wallet, Sparkles, Phone, Megaphone, Send } from 'lucide-react'
+import { useDashboard, useOutreachStats, type Period } from '../hooks/queries'
 import { formatCurrency, formatDateTime, marketplaceLabel } from '../lib/format'
 import { EmptyState, ErrorState, MarketplaceBadge, PageHeader } from '../components/ui'
 
@@ -44,6 +44,8 @@ function Kpi({
 export default function Dashboard() {
   const [period, setPeriod] = useState<Period>('30d')
   const { data, isLoading, error } = useDashboard(period)
+  const { data: stats } = useOutreachStats()
+  const enrichedPct = stats && stats.total > 0 ? Math.round((stats.enriched / stats.total) * 100) : 0
 
   return (
     <div>
@@ -94,6 +96,38 @@ export default function Dashboard() {
         />
       </div>
 
+      <h2 className="mb-2 mt-6 font-display text-sm font-semibold text-gray-900">Base &amp; WhatsApp</h2>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="card p-4">
+          <div className="flex items-center gap-2 text-gray-500">
+            <Sparkles className="h-4 w-4" aria-hidden />
+            <span className="text-xs font-medium uppercase tracking-wide">Enriquecidos</span>
+          </div>
+          <p className="mt-2 font-display text-2xl font-semibold tabular-nums text-gray-900">
+            {stats ? `${enrichedPct}%` : '…'}
+          </p>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100">
+            <div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: `${enrichedPct}%` }} />
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            {stats?.enriched ?? 0} de {stats?.total ?? 0} clientes
+          </p>
+        </div>
+        <Kpi
+          icon={Phone}
+          label="Com telefone"
+          value={stats ? String(stats.withPhone) : '…'}
+          hint="prontos para WhatsApp"
+        />
+        <Kpi icon={Megaphone} label="Campanhas" value={stats ? String(stats.campaigns) : '…'} />
+        <Kpi
+          icon={Send}
+          label="Mensagens enviadas"
+          value={stats ? String(stats.messagesSent) : '…'}
+          hint={stats ? `${stats.delivered} entregues · ${stats.replied} responderam` : undefined}
+        />
+      </div>
+
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-5">
         <div className="card p-4 lg:col-span-3">
           <h2 className="font-display text-sm font-semibold text-gray-900">Vendas por marketplace</h2>
@@ -126,7 +160,7 @@ export default function Dashboard() {
                   />
                   <Bar dataKey="revenue" radius={[4, 4, 0, 0]} maxBarSize={80}>
                     {data.revenueByMarketplace.map((entry) => (
-                      <Cell key={entry.marketplace} fill={MP_COLORS[entry.marketplace] ?? '#0f766b'} />
+                      <Cell key={entry.marketplace} fill={MP_COLORS[entry.marketplace] ?? '#4f46e5'} />
                     ))}
                   </Bar>
                 </BarChart>
