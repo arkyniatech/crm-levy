@@ -245,11 +245,18 @@ export const CUSTOMERS_PAGE_SIZE = 25
 
 /** Filtro de enriquecimento usado nas abas da tela Clientes */
 export type EnrichFilter = 'all' | 'pending' | 'enriched'
+/** Filtro por telefone na tela Clientes */
+export type ContactFilter = 'all' | 'with_phone' | 'without_phone'
 
-export function useCustomers(search: string, page: number, enrichFilter: EnrichFilter = 'all') {
+export function useCustomers(
+  search: string,
+  page: number,
+  enrichFilter: EnrichFilter = 'all',
+  contactFilter: ContactFilter = 'all',
+) {
   const { activeClient } = useCompany()
   return useQuery({
-    queryKey: ['customers', activeClient?.id, search, page, enrichFilter],
+    queryKey: ['customers', activeClient?.id, search, page, enrichFilter, contactFilter],
     enabled: Boolean(activeClient),
     placeholderData: (prev) => prev,
     queryFn: async () => {
@@ -263,6 +270,9 @@ export function useCustomers(search: string, page: number, enrichFilter: EnrichF
       // Abas: pendente = ainda sem enriched_at; enriquecido = já processado
       if (enrichFilter === 'pending') q = q.filter('extra->>enriched_at', 'is', null)
       else if (enrichFilter === 'enriched') q = q.not('extra->>enriched_at', 'is', null)
+      // Filtro de telefone
+      if (contactFilter === 'with_phone') q = q.not('phone', 'is', null)
+      else if (contactFilter === 'without_phone') q = q.is('phone', null)
       const term = search.trim()
       if (term) {
         const like = `%${term}%`

@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Search, Sparkles } from 'lucide-react'
-import { CUSTOMERS_PAGE_SIZE, useCustomers, useOutreachStats, type EnrichFilter } from '../hooks/queries'
+import {
+  CUSTOMERS_PAGE_SIZE,
+  useCustomers,
+  useOutreachStats,
+  type ContactFilter,
+  type EnrichFilter,
+} from '../hooks/queries'
 import { enrichCustomers } from '../hooks/enrich'
 import { useEnrichmentCredits, useSpendCredits } from '../hooks/settings'
 import { formatCurrency, formatDate, formatPhone, maskCpf } from '../lib/format'
@@ -101,8 +107,9 @@ export default function Customers() {
   const [page, setPage] = useState(0)
   const [tab, setTab] = useState<EnrichFilter>('pending')
   const [tabTouched, setTabTouched] = useState(false)
+  const [contact, setContact] = useState<ContactFilter>('all')
   const navigate = useNavigate()
-  const { data, isLoading, error, isFetching } = useCustomers(search, page, tab)
+  const { data, isLoading, error, isFetching } = useCustomers(search, page, tab, contact)
   const { data: stats } = useOutreachStats()
   const pendingCount = stats ? Math.max(0, stats.total - stats.enriched) : null
   const enrichedCount = stats?.enriched ?? null
@@ -149,26 +156,42 @@ export default function Customers() {
 
       {error && <ErrorState message={(error as Error).message} />}
 
-      <div className="mb-4 flex gap-1 border-b border-gray-200">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => {
-              setTab(t.key)
-              setTabTouched(true)
-              setPage(0)
-            }}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-              tab === t.key
-                ? 'border-brand-600 text-brand-700'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {t.label}
-            {counts[t.key] != null && <span className="ml-1 tabular-nums text-gray-400">({counts[t.key]})</span>}
-          </button>
-        ))}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-gray-200">
+        <div className="flex gap-1">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => {
+                setTab(t.key)
+                setTabTouched(true)
+                setPage(0)
+              }}
+              className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                tab === t.key
+                  ? 'border-brand-600 text-brand-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t.label}
+              {counts[t.key] != null && <span className="ml-1 tabular-nums text-gray-400">({counts[t.key]})</span>}
+            </button>
+          ))}
+        </div>
+        <select
+          value={contact}
+          onChange={(e) => {
+            setContact(e.target.value as ContactFilter)
+            setPage(0)
+          }}
+          className="input mb-1.5 w-auto py-1.5 text-sm"
+          aria-label="Filtrar por telefone"
+          title="Filtrar clientes por telefone"
+        >
+          <option value="all">Telefone: todos</option>
+          <option value="with_phone">Só com telefone</option>
+          <option value="without_phone">Só sem telefone</option>
+        </select>
       </div>
 
       <div className={`card overflow-hidden ${isFetching && !isLoading ? 'opacity-70' : ''}`}>
