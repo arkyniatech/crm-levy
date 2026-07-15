@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Search, Sparkles } from 'lucide-react'
-import { CUSTOMERS_PAGE_SIZE, useCustomers, type EnrichFilter } from '../hooks/queries'
+import { CUSTOMERS_PAGE_SIZE, useCustomers, useOutreachStats, type EnrichFilter } from '../hooks/queries'
 import { enrichCustomers } from '../hooks/enrich'
 import { formatCurrency, formatDate, formatPhone, maskCpf } from '../lib/format'
 import { EmptyState, ErrorState, LoadingRows, PageHeader, Pagination, StatusBadge } from '../components/ui'
@@ -78,7 +78,16 @@ export default function Customers() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
   const [tab, setTab] = useState<EnrichFilter>('pending')
+  const [tabTouched, setTabTouched] = useState(false)
   const { data, isLoading, error, isFetching } = useCustomers(search, page, tab)
+  const { data: stats } = useOutreachStats()
+  const pendingCount = stats ? Math.max(0, stats.total - stats.enriched) : null
+  const enrichedCount = stats?.enriched ?? null
+  const counts: Record<EnrichFilter, number | null> = {
+    all: stats?.total ?? null,
+    pending: pendingCount,
+    enriched: enrichedCount,
+  }
 
   // debounce da busca
   useEffect(() => {
@@ -88,6 +97,13 @@ export default function Customers() {
     }, 350)
     return () => clearTimeout(t)
   }, [input])
+
+  // Se não houver pendentes, abre já na aba com clientes (evita tela vazia)
+  useEffect(() => {
+    if (!tabTouched && stats && pendingCount === 0 && (enrichedCount ?? 0) > 0) {
+      setTab('enriched')
+    }
+  }, [stats, tabTouched, pendingCount, enrichedCount])
 
   return (
     <div>
@@ -117,6 +133,7 @@ export default function Customers() {
             type="button"
             onClick={() => {
               setTab(t.key)
+              setTabTouched(true)
               setPage(0)
             }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
@@ -126,6 +143,7 @@ export default function Customers() {
             }`}
           >
             {t.label}
+            {counts[t.key] != null && <span className="ml-1 tabular-nums text-gray-400">({counts[t.key]})</span>}
           </button>
         ))}
       </div>
