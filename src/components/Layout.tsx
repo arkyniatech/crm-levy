@@ -12,7 +12,6 @@ import {
   LogOut,
   Menu,
   X,
-  Building2,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useCompany } from '../context/CompanyContext'
@@ -47,9 +46,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       </div>
 
-      {/* Seletor de empresa (CNPJ) — só aparece como select se houver mais de uma */}
-      <div className="px-3 pb-4">
-        {clients.length > 1 ? (
+      {/* Seletor de empresa (CNPJ) — só aparece quando há mais de uma empresa.
+          Com uma só, não mostramos nada (info desnecessária por enquanto). */}
+      {clients.length > 1 && (
+        <div className="px-3 pb-4">
           <label className="block">
             <span className="sr-only">Empresa ativa</span>
             <select
@@ -64,20 +64,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               ))}
             </select>
           </label>
-        ) : (
-          <div className="flex items-center gap-2 rounded-md bg-ink-800 px-2.5 py-2">
-            <Building2 className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-            <div className="min-w-0">
-              <p className="truncate text-sm text-slate-200">{activeClient?.name ?? 'Carregando…'}</p>
-              {activeClient?.document && (
-                <p className="truncate text-[11px] tabular-nums text-slate-500">{formatCnpj(activeClient.document)}</p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <nav className="flex-1 space-y-0.5 px-3" aria-label="Navegação principal">
+      <nav className="flex-1 space-y-0.5 px-3 pt-2" aria-label="Navegação principal">
         {NAV.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
