@@ -37,10 +37,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2.5 px-5 pb-6 pt-6">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-800 ring-1 ring-white/10">
-          <span className="font-display text-base font-bold text-brand-500">U</span>
+          <span className="font-display text-base font-bold text-brand-500">C</span>
         </div>
         <div>
-          <p className="font-display text-sm font-semibold tracking-wide text-white">Unificca</p>
+          <p className="font-display text-sm font-semibold tracking-wide text-white">Contatta</p>
           <p className="text-[11px] text-slate-400">central de operação</p>
         </div>
       </div>
@@ -157,7 +157,7 @@ export default function Layout() {
       {/* Topbar + drawer mobile */}
       <div className="flex items-center justify-between bg-ink-900 px-4 py-3 lg:hidden">
         <div className="flex items-center gap-2">
-          <span className="font-display text-sm font-semibold text-white">Unificca</span>
+          <span className="font-display text-sm font-semibold text-white">Contatta</span>
         </div>
         <button
           type="button"

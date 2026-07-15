@@ -35,10 +35,10 @@ export default function Login() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-ink-950 px-4">
       <div className="mb-8 flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink-800 ring-1 ring-white/10">
-          <span className="font-display text-lg font-bold text-brand-500">U</span>
+          <span className="font-display text-lg font-bold text-brand-500">C</span>
         </div>
         <div>
-          <p className="font-display text-lg font-semibold tracking-wide text-white">Unificca</p>
+          <p className="font-display text-lg font-semibold tracking-wide text-white">Contatta</p>
           <p className="text-xs text-slate-400">Seus marketplaces, uma visão só</p>
         </div>
       </div>
