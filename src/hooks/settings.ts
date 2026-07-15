@@ -28,6 +28,58 @@ export function useCampaignDelay() {
   })
 }
 
+export interface EnrichmentCredits {
+  balance: number
+  validUntil: string | null
+}
+
+/** Saldo de créditos de enriquecimento (1 crédito = 1 enriquecimento). */
+export function useEnrichmentCredits() {
+  const { activeClient } = useCompany()
+  return useQuery({
+    queryKey: ['settings', 'enrichment_credits', activeClient?.id],
+    enabled: Boolean(activeClient),
+    queryFn: async (): Promise<EnrichmentCredits> => {
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('client_id', activeClient!.id)
+        .eq('key', 'enrichment_credits')
+        .maybeSingle()
+      if (error) throw new Error(error.message)
+      const v = (data?.value ?? {}) as { balance?: number; valid_until?: string }
+      return { balance: Math.max(0, Number(v.balance) || 0), validUntil: v.valid_until ?? null }
+    },
+  })
+}
+
+/** Desconta `amount` créditos do saldo (chamado após um enriquecimento). */
+export function useSpendCredits() {
+  const { activeClient } = useCompany()
+  const queryClient = useQueryClient()
+  return async (amount: number): Promise<void> => {
+    if (!activeClient || amount <= 0) return
+    const { data } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('client_id', activeClient.id)
+      .eq('key', 'enrichment_credits')
+      .maybeSingle()
+    const v = (data?.value ?? {}) as { balance?: number; valid_until?: string }
+    const next = { ...v, balance: Math.max(0, (Number(v.balance) || 0) - amount) }
+    await supabase.from('app_settings').upsert(
+      {
+        client_id: activeClient.id,
+        key: 'enrichment_credits',
+        value: next,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'client_id,key' },
+    )
+    void queryClient.invalidateQueries({ queryKey: ['settings', 'enrichment_credits'] })
+  }
+}
+
 export interface BirthdaySettings {
   enabled: boolean
   message: string

@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Search, Sparkles } from 'lucide-react'
 import { CUSTOMERS_PAGE_SIZE, useCustomers, useOutreachStats, type EnrichFilter } from '../hooks/queries'
 import { enrichCustomers } from '../hooks/enrich'
+import { useEnrichmentCredits, useSpendCredits } from '../hooks/settings'
 import { formatCurrency, formatDate, formatPhone, maskCpf } from '../lib/format'
 import { EmptyState, ErrorState, LoadingRows, PageHeader, Pagination, StatusBadge } from '../components/ui'
 
@@ -13,22 +14,32 @@ const TABS: { key: EnrichFilter; label: string }[] = [
 ]
 
 function EnrichControl() {
+  const { data: credits } = useEnrichmentCredits()
+  const spend = useSpendCredits()
+  const balance = credits?.balance ?? 0
   const [limit, setLimit] = useState(10)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
   const queryClient = useQueryClient()
 
   const run = async () => {
+    if (balance <= 0) {
+      setMsg({ tone: 'err', text: 'Sem créditos. Recarregue para enriquecer.' })
+      return
+    }
     setBusy(true)
     setMsg(null)
-    const res = await enrichCustomers(limit)
+    const res = await enrichCustomers(Math.max(1, Math.min(limit, balance)))
     setBusy(false)
     if (!res.ok) {
       setMsg({ tone: 'err', text: res.error ?? 'Falha ao enriquecer.' })
       return
     }
-    setMsg({ tone: 'ok', text: `${res.enriquecidos} cliente(s) enriquecido(s) via NovaVida.` })
+    const n = res.enriquecidos ?? 0
+    if (n > 0) await spend(n)
+    setMsg({ tone: 'ok', text: `${n} enriquecido(s). Restam ${Math.max(0, balance - n)} créditos.` })
     void queryClient.invalidateQueries({ queryKey: ['customers'] })
+    void queryClient.invalidateQueries({ queryKey: ['outreach-stats'] })
   }
 
   return (
@@ -36,23 +47,34 @@ function EnrichControl() {
       <input
         type="number"
         min={1}
-        max={500}
+        max={Math.max(1, balance)}
         className="input w-20"
         value={limit}
-        onChange={(e) => setLimit(Math.max(1, Number(e.target.value) || 1))}
+        onChange={(e) =>
+          setLimit(Math.max(1, Math.min(balance > 0 ? balance : 1, Number(e.target.value) || 1)))
+        }
         aria-label="Quantos clientes enriquecer"
-        title="Quantos clientes buscar dados na NovaVida"
+        title="Quantos clientes buscar dados na NovaVida (limitado pelo saldo)"
       />
       <button
         type="button"
         className="btn-primary shrink-0"
         onClick={() => void run()}
-        disabled={busy}
+        disabled={busy || balance <= 0}
         title="Busca nome, telefone, e-mail e endereço pelo CPF (NovaVida)"
       >
         <Sparkles className="h-4 w-4" aria-hidden />
         {busy ? 'Enriquecendo…' : 'Enriquecer dados'}
       </button>
+      {credits && (
+        <span className="text-xs text-gray-500">
+          <span className={`font-medium tabular-nums ${balance <= 0 ? 'text-red-600' : 'text-gray-700'}`}>
+            {balance}
+          </span>{' '}
+          créditos
+          {credits.validUntil && <span className="text-gray-400"> · até {formatDate(credits.validUntil)}</span>}
+        </span>
+      )}
       {msg && (
         <span className={`text-xs ${msg.tone === 'ok' ? 'text-emerald-700' : 'text-red-700'}`}>{msg.text}</span>
       )}
