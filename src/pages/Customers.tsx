@@ -8,7 +8,6 @@ import { formatCurrency, formatDate, maskCpf } from '../lib/format'
 import { EmptyState, ErrorState, LoadingRows, PageHeader, Pagination, StatusBadge } from '../components/ui'
 
 const TABS: { key: EnrichFilter; label: string }[] = [
-  { key: 'all', label: 'Todos' },
   { key: 'pending', label: 'Pendentes' },
   { key: 'enriched', label: 'Enriquecidos' },
 ]
@@ -71,7 +70,7 @@ export default function Customers() {
   const [input, setInput] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
-  const [tab, setTab] = useState<EnrichFilter>('all')
+  const [tab, setTab] = useState<EnrichFilter>('pending')
   const { data, isLoading, error, isFetching } = useCustomers(search, page, tab)
 
   // debounce da busca
