@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { CheckCheck, Copy, Eye, Megaphone, Plus, Rocket, Users } from 'lucide-react'
 import {
@@ -8,6 +9,7 @@ import {
   type AudienceInput,
   type WaCampaign,
 } from '../hooks/campaigns'
+import { SEGMENTS, segmentLabel } from '../lib/segments'
 import { formatDateTime } from '../lib/format'
 import { EmptyState, ErrorState, PageHeader, StatusBadge } from '../components/ui'
 
@@ -25,6 +27,20 @@ const AUDIENCE_LABEL: Record<string, string> = {
   recent: 'Compradores recentes',
 }
 
+function audienceDescription(a: WaCampaign['audience']): string {
+  if (a?.type === 'segment') return `Segmento: ${segmentLabel(a.segment ?? '')}`
+  return AUDIENCE_LABEL[a?.type ?? ''] ?? 'Público personalizado'
+}
+
+interface CampaignPreset {
+  presetName?: string
+  presetMessage?: string
+  presetAudience?: AudienceInput
+}
+
+/** valores possíveis do seletor de público (inclui os segmentos) */
+type AudienceChoice = 'test' | 'all' | 'recent' | AudienceInput['segment']
+
 function parseTestNumbers(raw: string): string[] {
   return raw
     .split(/[\n,;]+/)
@@ -32,22 +48,40 @@ function parseTestNumbers(raw: string): string[] {
     .filter(Boolean)
 }
 
-function NewCampaignForm({ onCreated }: { onCreated: () => void }) {
+const SEGMENT_KEYS = SEGMENTS.map((s) => s.key)
+
+function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?: CampaignPreset }) {
   const [name, setName] = useState('')
   const [message, setMessage] = useState('')
-  const [audienceType, setAudienceType] = useState<AudienceInput['type']>('test')
+  const [choice, setChoice] = useState<AudienceChoice>('test')
   const [days, setDays] = useState(90)
+  const [minSpent, setMinSpent] = useState(300)
   const [testNumbers, setTestNumbers] = useState('')
   const [preview, setPreview] = useState<{ total: number; skipped: number; sample: string[] } | null>(null)
   const [busy, setBusy] = useState<'preview' | 'create' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const buildAudience = (): AudienceInput =>
-    audienceType === 'test'
-      ? { type: 'test', numbers: parseTestNumbers(testNumbers) }
-      : audienceType === 'recent'
-        ? { type: 'recent', days }
-        : { type: 'all' }
+  // Preenche o formulário quando vem um preset (ex.: da tela de Segmentos)
+  useEffect(() => {
+    if (!preset) return
+    if (preset.presetName) setName(preset.presetName)
+    if (preset.presetMessage) setMessage(preset.presetMessage)
+    const a = preset.presetAudience
+    if (a?.type === 'segment' && a.segment) setChoice(a.segment)
+    else if (a?.type) setChoice(a.type as AudienceChoice)
+    if (a?.days) setDays(a.days)
+    if (a?.min_spent) setMinSpent(a.min_spent)
+  }, [preset])
+
+  const isSegment = (SEGMENT_KEYS as string[]).includes(choice as string)
+
+  const buildAudience = (): AudienceInput => {
+    if (choice === 'test') return { type: 'test', numbers: parseTestNumbers(testNumbers) }
+    if (choice === 'recent') return { type: 'recent', days }
+    if (choice === 'all') return { type: 'all' }
+    // segmentos
+    return { type: 'segment', segment: choice, days, min_spent: minSpent }
+  }
 
   const handlePreview = async () => {
     setBusy('preview')
@@ -87,6 +121,7 @@ function NewCampaignForm({ onCreated }: { onCreated: () => void }) {
     setName('')
     setMessage('')
     setTestNumbers('')
+    setChoice('test')
     setPreview(null)
     onCreated()
   }
@@ -112,20 +147,29 @@ function NewCampaignForm({ onCreated }: { onCreated: () => void }) {
           <span className="text-sm font-medium text-gray-700">Público</span>
           <select
             className="input mt-1"
-            value={audienceType}
+            value={choice}
             onChange={(e) => {
-              setAudienceType(e.target.value as AudienceInput['type'])
+              setChoice(e.target.value as AudienceChoice)
               setPreview(null)
             }}
           >
-            <option value="test">Números de teste (recomendado antes de disparar de verdade)</option>
-            <option value="all">Todos os clientes com telefone</option>
-            <option value="recent">Compradores dos últimos X dias</option>
+            <optgroup label="Básico">
+              <option value="test">Números de teste (recomendado antes de disparar de verdade)</option>
+              <option value="all">Todos os clientes com telefone</option>
+              <option value="recent">Compradores dos últimos X dias</option>
+            </optgroup>
+            <optgroup label="Segmentos">
+              {SEGMENTS.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </label>
       </div>
 
-      {audienceType === 'test' && (
+      {choice === 'test' && (
         <label className="mt-3 block">
           <span className="text-sm font-medium text-gray-700">Números de teste (um por linha)</span>
           <textarea
@@ -137,18 +181,37 @@ function NewCampaignForm({ onCreated }: { onCreated: () => void }) {
           />
         </label>
       )}
-      {audienceType === 'recent' && (
-        <label className="mt-3 block w-40">
-          <span className="text-sm font-medium text-gray-700">Últimos quantos dias?</span>
+      {(choice === 'recent' || choice === 'inactive') && (
+        <label className="mt-3 block w-56">
+          <span className="text-sm font-medium text-gray-700">
+            {choice === 'recent' ? 'Compraram nos últimos X dias' : 'Sem comprar há mais de X dias'}
+          </span>
           <input
             type="number"
             min={1}
-            max={365}
+            max={730}
             className="input mt-1"
             value={days}
             onChange={(e) => setDays(Number(e.target.value) || 90)}
           />
         </label>
+      )}
+      {choice === 'vip' && (
+        <label className="mt-3 block w-56">
+          <span className="text-sm font-medium text-gray-700">Gasto total mínimo (R$)</span>
+          <input
+            type="number"
+            min={1}
+            className="input mt-1"
+            value={minSpent}
+            onChange={(e) => setMinSpent(Number(e.target.value) || 300)}
+          />
+        </label>
+      )}
+      {isSegment && (
+        <p className="mt-2 text-xs text-gray-500">
+          O público é recalculado no momento do disparo, a partir dos pedidos e dados dos clientes.
+        </p>
       )}
 
       <label className="mt-3 block">
@@ -243,7 +306,7 @@ function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged
       action: 'create',
       name: `${campaign.name} (cópia)`,
       message_body: campaign.message_body,
-      audience: campaign.audience as { type: 'test' | 'all' | 'recent'; days?: number; numbers?: string[] },
+      audience: campaign.audience as AudienceInput,
     })
     setDuplicating(false)
     if (!res.ok) {
@@ -259,7 +322,7 @@ function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged
         <div className="min-w-0">
           <p className="font-display text-sm font-semibold text-gray-900">{campaign.name}</p>
           <p className="mt-0.5 text-xs text-gray-500">
-            {AUDIENCE_LABEL[campaign.audience?.type ?? ''] ?? 'Público personalizado'}
+            {audienceDescription(campaign.audience)}
             {campaign.audience?.type === 'recent' && ` (${campaign.audience.days ?? 90} dias)`}
             {' · criada em '}
             <span className="tabular-nums">{formatDateTime(campaign.created_at)}</span>
@@ -328,6 +391,8 @@ function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged
 export default function Campaigns() {
   const { data: campaigns, isLoading, error } = useWaCampaigns()
   const queryClient = useQueryClient()
+  const location = useLocation()
+  const preset = (location.state ?? undefined) as CampaignPreset | undefined
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ['wa-campaigns'] })
 
   return (
@@ -337,7 +402,7 @@ export default function Campaigns() {
         subtitle="Disparos de WhatsApp para grupos de clientes — com ritmo controlado e opt-out automático"
       />
 
-      <NewCampaignForm onCreated={refresh} />
+      <NewCampaignForm onCreated={refresh} preset={preset} />
 
       {error && (
         <div className="mt-4">

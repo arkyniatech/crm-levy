@@ -3,6 +3,8 @@ import { NavLink, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard,
   Users,
+  Layers,
+  Package,
   ShoppingCart,
   FileUp,
   Megaphone,
@@ -19,7 +21,9 @@ import { formatCnpj } from '../lib/format'
 const NAV = [
   { to: '/', label: 'Visão Geral', icon: LayoutDashboard, end: true },
   { to: '/clientes', label: 'Clientes', icon: Users },
+  { to: '/segmentos', label: 'Segmentos', icon: Layers },
   { to: '/vendas', label: 'Vendas', icon: ShoppingCart },
+  { to: '/produtos', label: 'Produtos', icon: Package },
   { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
   { to: '/importar', label: 'Importar NF-e', icon: FileUp },
   { to: '/configuracoes', label: 'Configurações', icon: Settings },
