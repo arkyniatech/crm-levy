@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCheck, Copy, Eye, Megaphone, Plus, Rocket, Users } from 'lucide-react'
+import { CheckCheck, Copy, Eye, Megaphone, Pencil, Plus, Rocket, Trash2, Users, X } from 'lucide-react'
 import {
   campaignAction,
   campaignCounts,
+  deleteCampaign,
+  updateCampaign,
   useWaCampaigns,
   type AudienceInput,
   type WaCampaign,
@@ -274,6 +276,11 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
 function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged: () => void }) {
   const [starting, setStarting] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState(campaign.name)
+  const [editMessage, setEditMessage] = useState(campaign.message_body)
+  const [savingEdit, setSavingEdit] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const counts = campaignCounts(campaign)
   const statusInfo = STATUS_LABEL[campaign.status] ?? { label: campaign.status, tone: 'neutral' as const }
@@ -316,6 +323,44 @@ function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged
     onChanged()
   }
 
+  const handleSaveEdit = async () => {
+    if (!editName.trim() || !editMessage.trim()) {
+      setError('Nome e mensagem são obrigatórios.')
+      return
+    }
+    setSavingEdit(true)
+    setError(null)
+    const res = await updateCampaign(campaign.id, {
+      name: editName.trim(),
+      message_body: editMessage.trim(),
+    })
+    setSavingEdit(false)
+    if (!res.ok) {
+      setError(res.error ?? 'Falha ao salvar.')
+      return
+    }
+    setEditing(false)
+    onChanged()
+  }
+
+  const handleDelete = async () => {
+    if (
+      !window.confirm(
+        `Excluir a campanha "${campaign.name}"? Isso remove também os destinatários e não dá pra desfazer.`,
+      )
+    )
+      return
+    setDeleting(true)
+    setError(null)
+    const res = await deleteCampaign(campaign.id)
+    setDeleting(false)
+    if (!res.ok) {
+      setError(res.error ?? 'Falha ao excluir.')
+      return
+    }
+    onChanged()
+  }
+
   return (
     <div className="card p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -330,6 +375,22 @@ function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={statusInfo.label} tone={statusInfo.tone} />
+          {campaign.status === 'draft' && !editing && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              onClick={() => {
+                setEditing(true)
+                setEditName(campaign.name)
+                setEditMessage(campaign.message_body)
+                setError(null)
+              }}
+              title="Editar nome e mensagem"
+            >
+              <Pencil className="h-4 w-4" aria-hidden />
+              Editar
+            </button>
+          )}
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
@@ -340,18 +401,65 @@ function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged
             <Copy className="h-4 w-4" aria-hidden />
             {duplicating ? 'Duplicando…' : 'Duplicar'}
           </button>
-          {campaign.status === 'draft' && (
+          {campaign.status === 'draft' && !editing && (
             <button type="button" className="btn-primary !py-1.5" onClick={() => void handleStart()} disabled={starting}>
               <Rocket className="h-4 w-4" aria-hidden />
               {starting ? 'Iniciando…' : 'Disparar'}
             </button>
           )}
+          {!editing && (
+            <button
+              type="button"
+              className="inline-flex items-center justify-center rounded-md border border-gray-300 p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
+              onClick={() => void handleDelete()}
+              disabled={deleting}
+              title="Excluir campanha"
+              aria-label="Excluir campanha"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden />
+            </button>
+          )}
         </div>
       </div>
 
-      <p className="mt-2 line-clamp-2 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">
-        {campaign.message_body}
-      </p>
+      {editing ? (
+        <div className="mt-3 space-y-2">
+          <input
+            type="text"
+            className="input"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            placeholder="Nome da campanha"
+          />
+          <textarea
+            className="input"
+            rows={4}
+            value={editMessage}
+            onChange={(e) => setEditMessage(e.target.value)}
+            placeholder="Mensagem"
+          />
+          <div className="flex gap-2">
+            <button type="button" className="btn-primary !py-1.5" onClick={() => void handleSaveEdit()} disabled={savingEdit}>
+              {savingEdit ? 'Salvando…' : 'Salvar'}
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              onClick={() => {
+                setEditing(false)
+                setError(null)
+              }}
+            >
+              <X className="h-4 w-4" aria-hidden />
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-2 line-clamp-2 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">
+          {campaign.message_body}
+        </p>
+      )}
 
       {counts.total > 0 && (
         <div className="mt-3">

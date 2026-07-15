@@ -76,6 +76,23 @@ interface CampaignActionResponse {
   sending?: number
 }
 
+/** Edita nome/mensagem de uma campanha (rascunho). Escrita direta via RLS. */
+export async function updateCampaign(
+  id: string,
+  patch: { name?: string; message_body?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.from('wa_campaigns').update(patch).eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+/** Exclui uma campanha (os destinatários caem por cascade). Escrita direta via RLS. */
+export async function deleteCampaign(id: string): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.from('wa_campaigns').delete().eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
 export async function campaignAction(payload: {
   action: 'preview' | 'create' | 'start'
   name?: string
