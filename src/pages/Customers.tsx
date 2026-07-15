@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Search, Sparkles } from 'lucide-react'
 import { CUSTOMERS_PAGE_SIZE, useCustomers, useOutreachStats, type EnrichFilter } from '../hooks/queries'
@@ -79,6 +79,7 @@ export default function Customers() {
   const [page, setPage] = useState(0)
   const [tab, setTab] = useState<EnrichFilter>('pending')
   const [tabTouched, setTabTouched] = useState(false)
+  const navigate = useNavigate()
   const { data, isLoading, error, isFetching } = useCustomers(search, page, tab)
   const { data: stats } = useOutreachStats()
   const pendingCount = stats ? Math.max(0, stats.total - stats.enriched) : null
@@ -160,15 +161,18 @@ export default function Customers() {
                 <th className="th text-right">Pedidos</th>
                 <th className="th text-right">Total gasto</th>
                 <th className="th">Última compra</th>
-                <th className="th"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
-                <LoadingRows cols={8} />
+                <LoadingRows cols={7} />
               ) : (
                 data?.customers.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-50">
+                  <tr
+                    key={c.id}
+                    className="cursor-pointer hover:bg-gray-50"
+                    onClick={() => navigate(`/clientes/${c.id}`)}
+                  >
                     <td className="td">
                       <div className="flex items-center gap-3">
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">
@@ -223,11 +227,6 @@ export default function Customers() {
                     </td>
                     <td className="td text-right font-medium tabular-nums">{formatCurrency(c.totalSpent)}</td>
                     <td className="td tabular-nums">{formatDate(c.lastOrderAt)}</td>
-                    <td className="td text-right">
-                      <Link to={`/clientes/${c.id}`} className="text-sm text-brand-700 hover:underline">
-                        Ver pedidos
-                      </Link>
-                    </td>
                   </tr>
                 ))
               )}
