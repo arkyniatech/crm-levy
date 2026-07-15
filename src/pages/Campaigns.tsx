@@ -63,8 +63,14 @@ function CustomerPicker({
   }, [term])
 
   const selectedIds = new Set(selected.map((s) => s.id))
+  const fresh = results.filter((c) => !selectedIds.has(c.id))
   const add = (c: CustomerLite) => {
     if (!selectedIds.has(c.id)) onChange([...selected, c])
+    setTerm('')
+    setDebounced('')
+  }
+  const addAll = () => {
+    if (fresh.length) onChange([...selected, ...fresh])
     setTerm('')
     setDebounced('')
   }
@@ -111,9 +117,17 @@ function CustomerPicker({
           {!isFetching && results.length === 0 && (
             <p className="px-3 py-2 text-xs text-gray-400">Nenhum cliente encontrado.</p>
           )}
-          {results
-            .filter((c) => !selectedIds.has(c.id))
-            .map((c) => (
+          {!isFetching && fresh.length > 1 && (
+            <button
+              type="button"
+              onClick={addAll}
+              className="sticky top-0 flex w-full items-center gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-left text-xs font-medium text-brand-700 hover:bg-brand-50"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+              Adicionar todos ({fresh.length})
+            </button>
+          )}
+          {fresh.map((c) => (
               <button
                 key={c.id}
                 type="button"
