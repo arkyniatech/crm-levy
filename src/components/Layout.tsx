@@ -12,6 +12,8 @@ import {
   LogOut,
   Menu,
   X,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useCompany } from '../context/CompanyContext'
@@ -29,14 +31,22 @@ const NAV = [
 
 const SOON: { label: string; icon: typeof Settings }[] = []
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({
+  onNavigate,
+  collapsed = false,
+  onToggleCollapse,
+}: {
+  onNavigate?: () => void
+  collapsed?: boolean
+  onToggleCollapse?: () => void
+}) {
   const { signOut, session } = useAuth()
   const { clients, activeClient, setActiveClientId } = useCompany()
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2.5 px-5 pb-6 pt-6">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600">
+      <div className={`flex items-center pb-6 pt-6 ${collapsed ? 'flex-col gap-3 px-2' : 'gap-2.5 px-5'}`}>
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600">
           <svg viewBox="0 0 32 32" className="h-5 w-5" aria-hidden="true">
             <path d="M16 7a9 9 0 0 0-7.7 13.6L7 25l4.6-1.2A9 9 0 1 0 16 7z" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinejoin="round" />
             <circle cx="11.5" cy="16" r="1.5" fill="#fff" />
@@ -44,15 +54,28 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             <circle cx="20.5" cy="16" r="1.5" fill="#c7d2fe" />
           </svg>
         </div>
-        <div>
-          <p className="font-display text-sm font-semibold tracking-wide text-white">Contatta</p>
-          <p className="text-[11px] text-slate-400">central de operação</p>
-        </div>
+        {!collapsed && (
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-sm font-semibold tracking-wide text-white">Contatta</p>
+            <p className="text-[11px] text-slate-400">central de operação</p>
+          </div>
+        )}
+        {onToggleCollapse && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="rounded-md p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+            title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+            aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
+          >
+            {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+          </button>
+        )}
       </div>
 
       {/* Seletor de empresa (CNPJ) — só aparece quando há mais de uma empresa.
           Com uma só, não mostramos nada (info desnecessária por enquanto). */}
-      {clients.length > 1 && (
+      {clients.length > 1 && !collapsed && (
         <div className="px-3 pb-4">
           <label className="block">
             <span className="sr-only">Empresa ativa</span>
@@ -78,16 +101,17 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             to={to}
             end={end}
             onClick={onNavigate}
+            title={collapsed ? label : undefined}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-colors ${
-                isActive ? 'bg-brand-600/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'
-              }`
+              `flex items-center rounded-md py-2 text-sm font-medium transition-colors ${
+                collapsed ? 'justify-center px-2' : 'gap-3 px-2.5'
+              } ${isActive ? 'bg-brand-600/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`
             }
           >
             {({ isActive }) => (
               <>
-                <Icon className={`h-4 w-4 ${isActive ? 'text-brand-500' : 'text-slate-400'}`} aria-hidden />
-                {label}
+                <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-brand-500' : 'text-slate-400'}`} aria-hidden />
+                {!collapsed && label}
               </>
             )}
           </NavLink>
@@ -115,32 +139,38 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <NavLink
           to="/configuracoes"
           onClick={onNavigate}
+          title={collapsed ? 'Configurações' : undefined}
           className={({ isActive }) =>
-            `flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-colors ${
-              isActive ? 'bg-brand-600/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'
-            }`
+            `flex items-center rounded-md py-2 text-sm font-medium transition-colors ${
+              collapsed ? 'justify-center px-2' : 'gap-3 px-2.5'
+            } ${isActive ? 'bg-brand-600/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`
           }
         >
           {({ isActive }) => (
             <>
-              <Settings className={`h-4 w-4 ${isActive ? 'text-brand-500' : 'text-slate-400'}`} aria-hidden />
-              Configurações
+              <Settings className={`h-4 w-4 shrink-0 ${isActive ? 'text-brand-500' : 'text-slate-400'}`} aria-hidden />
+              {!collapsed && 'Configurações'}
             </>
           )}
         </NavLink>
       </div>
 
       <div className="border-t border-white/10 px-3 py-3">
-        <p className="mb-2 truncate px-2.5 text-xs text-slate-500" title={session?.user.email ?? ''}>
-          {session?.user.email}
-        </p>
+        {!collapsed && (
+          <p className="mb-2 truncate px-2.5 text-xs text-slate-500" title={session?.user.email ?? ''}>
+            {session?.user.email}
+          </p>
+        )}
         <button
           type="button"
           onClick={() => void signOut()}
-          className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white"
+          title={collapsed ? 'Sair' : undefined}
+          className={`flex w-full items-center rounded-md py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white ${
+            collapsed ? 'justify-center px-2' : 'gap-3 px-2.5'
+          }`}
         >
-          <LogOut className="h-4 w-4 text-slate-400" aria-hidden />
-          Sair
+          <LogOut className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+          {!collapsed && 'Sair'}
         </button>
       </div>
     </div>
@@ -149,13 +179,26 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem('contatta.sidebarCollapsed') === '1',
+  )
+  const toggleCollapse = () =>
+    setCollapsed((v) => {
+      const next = !v
+      localStorage.setItem('contatta.sidebarCollapsed', next ? '1' : '0')
+      return next
+    })
 
   return (
     <div className="min-h-screen lg:flex">
       {/* Sidebar desktop */}
-      <aside className="hidden w-60 shrink-0 bg-ink-900 lg:block">
+      <aside
+        className={`hidden shrink-0 bg-ink-900 transition-[width] duration-200 lg:block ${
+          collapsed ? 'w-16' : 'w-60'
+        }`}
+      >
         <div className="sticky top-0 h-screen">
-          <SidebarContent />
+          <SidebarContent collapsed={collapsed} onToggleCollapse={toggleCollapse} />
         </div>
       </aside>
 
@@ -191,7 +234,7 @@ export default function Layout() {
       )}
 
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-6xl">
+        <div className="mx-auto w-full max-w-[1600px]">
           <Outlet />
         </div>
       </main>
