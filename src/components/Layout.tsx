@@ -25,7 +25,6 @@ const NAV = [
   { to: '/produtos', label: 'Produtos', icon: Package },
   { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
   { to: '/importar', label: 'Importar NF-e', icon: FileUp },
-  { to: '/configuracoes', label: 'Configurações', icon: Settings },
 ]
 
 const SOON: { label: string; icon: typeof Settings }[] = []
@@ -106,6 +105,25 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </span>
         ))}
       </nav>
+
+      <div className="px-3 pb-1">
+        <NavLink
+          to="/configuracoes"
+          onClick={onNavigate}
+          className={({ isActive }) =>
+            `flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-colors ${
+              isActive ? 'bg-brand-600/15 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'
+            }`
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <Settings className={`h-4 w-4 ${isActive ? 'text-brand-500' : 'text-slate-400'}`} aria-hidden />
+              Configurações
+            </>
+          )}
+        </NavLink>
+      </div>
 
       <div className="border-t border-white/10 px-3 py-3">
         <p className="mb-2 truncate px-2.5 text-xs text-slate-500" title={session?.user.email ?? ''}>
