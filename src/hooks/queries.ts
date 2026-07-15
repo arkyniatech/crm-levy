@@ -263,15 +263,17 @@ export interface OrdersFilter {
   marketplace: string
   status: string
   search: string
+  from: string
+  to: string
   page: number
 }
 
-export function useOrders({ marketplace, status, search, page }: OrdersFilter) {
+export function useOrders({ marketplace, status, search, from: dateFrom, to: dateTo, page }: OrdersFilter) {
   const { activeClient } = useCompany()
   const { data: stores } = useStores()
   const storeIds = (stores ?? []).map((s) => s.id)
   return useQuery({
-    queryKey: ['orders', activeClient?.id, marketplace, status, search, page, storeIds.join(',')],
+    queryKey: ['orders', activeClient?.id, marketplace, status, search, dateFrom, dateTo, page, storeIds.join(',')],
     enabled: Boolean(activeClient) && stores !== undefined,
     placeholderData: (prev) => prev,
     queryFn: async () => {
@@ -285,6 +287,8 @@ export function useOrders({ marketplace, status, search, page }: OrdersFilter) {
         .range(from, from + ORDERS_PAGE_SIZE - 1)
       if (marketplace) q = q.eq('marketplace', marketplace)
       if (status) q = q.eq('status', status)
+      if (dateFrom) q = q.gte('ordered_at', new Date(dateFrom + 'T00:00:00').toISOString())
+      if (dateTo) q = q.lte('ordered_at', new Date(dateTo + 'T23:59:59').toISOString())
       const term = search.trim()
       if (term) {
         const like = `%${term}%`

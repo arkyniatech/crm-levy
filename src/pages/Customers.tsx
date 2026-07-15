@@ -102,11 +102,12 @@ export default function Customers() {
                 <th className="th text-right">Pedidos</th>
                 <th className="th text-right">Total gasto</th>
                 <th className="th">Última compra</th>
+                <th className="th"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
-                <LoadingRows cols={6} />
+                <LoadingRows cols={7} />
               ) : (
                 data?.customers.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50">
@@ -117,9 +118,26 @@ export default function Customers() {
                     </td>
                     <td className="td tabular-nums">{maskCpf(c.cpf)}</td>
                     <td className="td">{[c.city, c.state].filter(Boolean).join('/') || '—'}</td>
-                    <td className="td text-right tabular-nums">{c.orderCount}</td>
+                    <td className="td text-right tabular-nums">
+                      {c.orderCount > 0 ? (
+                        <Link
+                          to={`/clientes/${c.id}`}
+                          className="font-medium text-brand-700 hover:underline"
+                          title="Ver os produtos que comprou"
+                        >
+                          {c.orderCount}
+                        </Link>
+                      ) : (
+                        <span className="text-gray-400">0</span>
+                      )}
+                    </td>
                     <td className="td text-right font-medium tabular-nums">{formatCurrency(c.totalSpent)}</td>
                     <td className="td tabular-nums">{formatDate(c.lastOrderAt)}</td>
+                    <td className="td text-right">
+                      <Link to={`/clientes/${c.id}`} className="text-sm text-brand-700 hover:underline">
+                        Ver pedidos
+                      </Link>
+                    </td>
                   </tr>
                 ))
               )}

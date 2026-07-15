@@ -7,9 +7,9 @@ import Dashboard from './pages/Dashboard'
 import Customers from './pages/Customers'
 import CustomerDetail from './pages/CustomerDetail'
 import Orders from './pages/Orders'
-import Integrations from './pages/Integrations'
 import ImportNfe from './pages/ImportNfe'
 import Campaigns from './pages/Campaigns'
+import Settings from './pages/Settings'
 
 function ProtectedRoutes() {
   const { session, loading } = useAuth()
@@ -50,9 +50,10 @@ export default function App() {
         <Route path="/clientes" element={<Customers />} />
         <Route path="/clientes/:id" element={<CustomerDetail />} />
         <Route path="/vendas" element={<Orders />} />
-        <Route path="/integracoes" element={<Integrations />} />
         <Route path="/importar" element={<ImportNfe />} />
         <Route path="/campanhas" element={<Campaigns />} />
+        <Route path="/configuracoes" element={<Settings />} />
+        <Route path="/integracoes" element={<Navigate to="/configuracoes" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

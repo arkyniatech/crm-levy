@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   Users,
   ShoppingCart,
-  Plug,
   FileUp,
   Megaphone,
   Settings,
@@ -23,10 +22,10 @@ const NAV = [
   { to: '/vendas', label: 'Vendas', icon: ShoppingCart },
   { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
   { to: '/importar', label: 'Importar NF-e', icon: FileUp },
-  { to: '/integracoes', label: 'Integrações', icon: Plug },
+  { to: '/configuracoes', label: 'Configurações', icon: Settings },
 ]
 
-const SOON = [{ label: 'Configurações', icon: Settings }]
+const SOON: { label: string; icon: typeof Settings }[] = []
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { signOut, session } = useAuth()
@@ -96,7 +95,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </NavLink>
         ))}
 
-        <p className="px-2.5 pb-1 pt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Em breve</p>
+        {SOON.length > 0 && (
+          <p className="px-2.5 pb-1 pt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            Em breve
+          </p>
+        )}
         {SOON.map(({ label, icon: Icon }) => (
           <span
             key={label}

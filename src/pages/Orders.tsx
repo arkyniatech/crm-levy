@@ -19,11 +19,13 @@ export default function Orders() {
   const [status, setStatus] = useState('')
   const [input, setInput] = useState('')
   const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(0)
 
   const { data: stores } = useStores()
   const { data: statuses } = useOrderStatuses()
-  const { data, isLoading, error, isFetching } = useOrders({ marketplace, status, search, page })
+  const { data, isLoading, error, isFetching } = useOrders({ marketplace, status, search, from: dateFrom, to: dateTo, page })
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -34,7 +36,10 @@ export default function Orders() {
   }, [input])
 
   const marketplaces = [...new Set((stores ?? []).map((s) => s.marketplace))]
-  const hasFilter = Boolean(marketplace || status || search)
+  const hasFilter = Boolean(marketplace || status || search || dateFrom || dateTo)
+  const totalPeriodo = (data?.orders ?? [])
+    .filter((o) => !(o.status ?? '').toLowerCase().includes('cancel'))
+    .reduce((s, o) => s + (o.total_amount ?? 0), 0)
 
   return (
     <div>
@@ -84,7 +89,58 @@ export default function Orders() {
             </option>
           ))}
         </select>
+        <div className="flex items-center gap-1">
+          <label className="flex items-center gap-1 text-xs text-gray-500">
+            De
+            <input
+              type="date"
+              className="input"
+              value={dateFrom}
+              onChange={(e) => {
+                setDateFrom(e.target.value)
+                setPage(0)
+              }}
+              aria-label="Data inicial"
+            />
+          </label>
+          <label className="flex items-center gap-1 text-xs text-gray-500">
+            até
+            <input
+              type="date"
+              className="input"
+              value={dateTo}
+              onChange={(e) => {
+                setDateTo(e.target.value)
+                setPage(0)
+              }}
+              aria-label="Data final"
+            />
+          </label>
+        </div>
+        {hasFilter && (
+          <button
+            type="button"
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+            onClick={() => {
+              setMarketplace('')
+              setStatus('')
+              setInput('')
+              setDateFrom('')
+              setDateTo('')
+              setPage(0)
+            }}
+          >
+            Limpar
+          </button>
+        )}
       </div>
+
+      {(dateFrom || dateTo) && (
+        <p className="mb-3 text-sm text-gray-600">
+          Total vendido na página atual do período (sem cancelados):{' '}
+          <span className="font-semibold tabular-nums text-gray-900">{formatCurrency(totalPeriodo)}</span>
+        </p>
+      )}
 
       {error && <ErrorState message={(error as Error).message} />}
 

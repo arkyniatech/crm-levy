@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCheck, Eye, Megaphone, Plus, Rocket, Users } from 'lucide-react'
+import { CheckCheck, Copy, Eye, Megaphone, Plus, Rocket, Users } from 'lucide-react'
 import {
   campaignAction,
   campaignCounts,
@@ -210,6 +210,7 @@ function NewCampaignForm({ onCreated }: { onCreated: () => void }) {
 
 function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged: () => void }) {
   const [starting, setStarting] = useState(false)
+  const [duplicating, setDuplicating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const counts = campaignCounts(campaign)
   const statusInfo = STATUS_LABEL[campaign.status] ?? { label: campaign.status, tone: 'neutral' as const }
@@ -233,6 +234,25 @@ function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged
     onChanged()
   }
 
+  // Reusar uma campanha: recria como novo rascunho com o mesmo texto/público,
+  // recalculando a lista de destinatários na hora (ex.: repetir a "Natal").
+  const handleDuplicate = async () => {
+    setDuplicating(true)
+    setError(null)
+    const res = await campaignAction({
+      action: 'create',
+      name: `${campaign.name} (cópia)`,
+      message_body: campaign.message_body,
+      audience: campaign.audience as { type: 'test' | 'all' | 'recent'; days?: number; numbers?: string[] },
+    })
+    setDuplicating(false)
+    if (!res.ok) {
+      setError(res.error ?? 'Falha ao duplicar.')
+      return
+    }
+    onChanged()
+  }
+
   return (
     <div className="card p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -247,6 +267,16 @@ function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={statusInfo.label} tone={statusInfo.tone} />
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+            onClick={() => void handleDuplicate()}
+            disabled={duplicating}
+            title="Recriar como novo rascunho para disparar de novo"
+          >
+            <Copy className="h-4 w-4" aria-hidden />
+            {duplicating ? 'Duplicando…' : 'Duplicar'}
+          </button>
           {campaign.status === 'draft' && (
             <button type="button" className="btn-primary !py-1.5" onClick={() => void handleStart()} disabled={starting}>
               <Rocket className="h-4 w-4" aria-hidden />
