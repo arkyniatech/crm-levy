@@ -1,6 +1,44 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useCompany } from '../context/CompanyContext'
+import { useAuth } from '../context/AuthContext'
+
+/** true se o usuário logado tem papel 'admin' em user_roles. */
+export function useIsAdmin() {
+  const { session } = useAuth()
+  const userId = session?.user.id
+  return useQuery({
+    queryKey: ['user-role', userId],
+    enabled: Boolean(userId),
+    queryFn: async (): Promise<boolean> => {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId!)
+        .maybeSingle()
+      if (error) return false // tabela ainda não existe → trata como não-admin
+      return data?.role === 'admin'
+    },
+  })
+}
+
+/** Recarrega/ajusta o saldo de créditos (uso do admin). */
+export function useSaveCredits() {
+  const { activeClient } = useCompany()
+  const queryClient = useQueryClient()
+  return async (patch: { balance: number; validUntil: string | null }): Promise<{ ok: boolean; error?: string }> => {
+    if (!activeClient) return { ok: false, error: 'Empresa não carregada.' }
+    const value: Record<string, unknown> = { balance: Math.max(0, Math.round(patch.balance)) }
+    if (patch.validUntil) value.valid_until = patch.validUntil
+    const { error } = await supabase.from('app_settings').upsert(
+      { client_id: activeClient.id, key: 'enrichment_credits', value, updated_at: new Date().toISOString() },
+      { onConflict: 'client_id,key' },
+    )
+    if (error) return { ok: false, error: error.message }
+    void queryClient.invalidateQueries({ queryKey: ['settings', 'enrichment_credits'] })
+    return { ok: true }
+  }
+}
 
 export interface CampaignDelay {
   min: number
