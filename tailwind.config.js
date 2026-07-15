@@ -11,13 +11,13 @@ export default {
           800: '#1a2138',
           700: '#242d4a',
         },
-        // Acento principal da marca Unificca
+        // Acento principal da marca Contatta
         brand: {
-          50: '#effaf9',
-          100: '#d7f1ef',
-          500: '#128c7e',
-          600: '#0f766b',
-          700: '#0d5f56',
+          50: '#eef2ff',
+          100: '#e0e7ff',
+          500: '#6366f1',
+          600: '#4f46e5',
+          700: '#4338ca',
         },
         // Um acento por marketplace
         shopee: '#ee4d2d',

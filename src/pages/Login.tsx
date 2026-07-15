@@ -34,8 +34,13 @@ export default function Login() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-ink-950 px-4">
       <div className="mb-8 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ink-800 ring-1 ring-white/10">
-          <span className="font-display text-lg font-bold text-brand-500">C</span>
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600">
+          <svg viewBox="0 0 32 32" className="h-6 w-6" aria-hidden="true">
+            <path d="M16 7a9 9 0 0 0-7.7 13.6L7 25l4.6-1.2A9 9 0 1 0 16 7z" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinejoin="round" />
+            <circle cx="11.5" cy="16" r="1.5" fill="#fff" />
+            <circle cx="16" cy="16" r="1.5" fill="#fff" />
+            <circle cx="20.5" cy="16" r="1.5" fill="#c7d2fe" />
+          </svg>
         </div>
         <div>
           <p className="font-display text-lg font-semibold tracking-wide text-white">Contatta</p>
