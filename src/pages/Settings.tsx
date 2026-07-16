@@ -3,7 +3,7 @@ import { Clock, Plug, Save, ShieldCheck, Sparkles, Trash2, UserPlus, Users } fro
 import {
   useCampaignDelay,
   useSaveCampaignDelay,
-  useIsAdmin,
+  useUserRole,
   useEnrichmentCredits,
   useSaveCredits,
 } from '../hooks/settings'
@@ -291,14 +291,16 @@ function CampaignDelaySection() {
 }
 
 export default function Settings() {
-  const { data: isAdmin } = useIsAdmin()
+  const { data: role } = useUserRole()
+  const isMaster = role === 'master'
+  const canManageUsers = role === 'master' || role === 'admin'
   return (
     <div>
       <PageHeader title="Configurações" subtitle="Ajustes da operação e status das integrações" />
 
       <div className="space-y-6">
-        {isAdmin && <AdminCreditsSection />}
-        {isAdmin && <AdminUsersSection />}
+        {isMaster && <AdminCreditsSection />}
+        {canManageUsers && <AdminUsersSection />}
         <CampaignDelaySection />
 
         <section>

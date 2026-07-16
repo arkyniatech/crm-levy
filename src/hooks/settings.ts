@@ -3,21 +3,23 @@ import { supabase } from '../lib/supabase'
 import { useCompany } from '../context/CompanyContext'
 import { useAuth } from '../context/AuthContext'
 
-/** true se o usuário logado tem papel 'admin' em user_roles. */
-export function useIsAdmin() {
+export type UserRole = 'master' | 'admin' | 'member'
+
+/** Papel do usuário logado (crm_user_roles). Master edita créditos; admin+master gerem usuários. */
+export function useUserRole() {
   const { session } = useAuth()
   const userId = session?.user.id
   return useQuery({
     queryKey: ['user-role', userId],
     enabled: Boolean(userId),
-    queryFn: async (): Promise<boolean> => {
+    queryFn: async (): Promise<UserRole> => {
       const { data, error } = await supabase
         .from('crm_user_roles')
         .select('role')
         .eq('user_id', userId!)
         .maybeSingle()
-      if (error) return false // tabela ainda não existe → trata como não-admin
-      return data?.role === 'admin'
+      if (error || !data) return 'member' // sem papel definido → membro
+      return (data.role as UserRole) || 'member'
     },
   })
 }
