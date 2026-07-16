@@ -31,6 +31,7 @@ jobs:
           VITE_N8N_NFE_WEBHOOK_URL: ${{ secrets.VITE_N8N_NFE_WEBHOOK_URL }}
           VITE_N8N_WA_CAMPAIGN_URL: ${{ secrets.VITE_N8N_WA_CAMPAIGN_URL }}
           VITE_N8N_ENRICH_URL: ${{ secrets.VITE_N8N_ENRICH_URL }}
+          VITE_N8N_ADMIN_USERS_URL: ${{ secrets.VITE_N8N_ADMIN_USERS_URL }}
 
       - name: Publicar dist/ na branch hostinger
         uses: peaceiris/actions-gh-pages@v4
