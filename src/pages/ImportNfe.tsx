@@ -35,6 +35,7 @@ export default function ImportNfe() {
   const [fileName, setFileName] = useState<string | null>(null)
   const [result, setResult] = useState<UploadResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [deductStock, setDeductStock] = useState(true)
   const queryClient = useQueryClient()
 
   const handleFile = async (file: File) => {
@@ -61,6 +62,7 @@ export default function ImportNfe() {
       }
       const form = new FormData()
       form.append('data', file)
+      form.append('deduct_stock', deductStock ? 'true' : 'false')
       const res = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -94,6 +96,23 @@ export default function ImportNfe() {
         title="Importar NF-e"
         subtitle="Envie um ZIP de notas (pode ter pastas e ZIPs internos) ou um XML avulso"
       />
+
+      <label className="mb-4 flex items-start gap-2.5 rounded-lg border border-gray-200 bg-white px-4 py-3">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-600"
+          checked={deductStock}
+          onChange={(e) => setDeductStock(e.target.checked)}
+        />
+        <span className="text-sm">
+          <span className="font-medium text-gray-800">Descontar do estoque</span>
+          <span className="block text-gray-500">
+            Marcado, cada item da nota baixa o estoque do produto (por SKU). Para importar{' '}
+            <strong>notas antigas</strong> só para cadastrar clientes, desmarque — assim o estoque não é
+            mexido.
+          </span>
+        </span>
+      </label>
 
       <div
         role="button"
