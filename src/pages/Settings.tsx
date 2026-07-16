@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Clock, Plug, Save, ShieldCheck, Sparkles } from 'lucide-react'
+import { Clock, Plug, Save, ShieldCheck, Sparkles, Trash2, UserPlus, Users } from 'lucide-react'
 import {
   useCampaignDelay,
   useSaveCampaignDelay,
@@ -7,9 +7,136 @@ import {
   useEnrichmentCredits,
   useSaveCredits,
 } from '../hooks/settings'
+import { listUsers, createUser, revokeUser, type AdminUser } from '../hooks/adminUsers'
 import StoresGrid from '../components/StoresGrid'
 import { formatDate } from '../lib/format'
-import { PageHeader } from '../components/ui'
+import { PageHeader, StatusBadge } from '../components/ui'
+
+function AdminUsersSection() {
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [loading, setLoading] = useState(true)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [role, setRole] = useState<'admin' | 'member'>('member')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    const res = await listUsers()
+    setLoading(false)
+    if (res.ok) setUsers(res.users ?? [])
+    else setMsg({ tone: 'err', text: res.error ?? 'Falha ao listar usuários.' })
+  }
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const add = async () => {
+    if (!email.trim() || password.length < 6) {
+      setMsg({ tone: 'err', text: 'Informe e-mail e uma senha de pelo menos 6 caracteres.' })
+      return
+    }
+    setBusy(true)
+    setMsg(null)
+    const res = await createUser(email.trim(), password, role)
+    setBusy(false)
+    if (!res.ok) {
+      setMsg({ tone: 'err', text: res.error ?? 'Falha ao criar usuário.' })
+      return
+    }
+    setMsg({ tone: 'ok', text: 'Usuário criado com acesso.' })
+    setEmail('')
+    setPassword('')
+    setRole('member')
+    void load()
+  }
+
+  const revoke = async (u: AdminUser) => {
+    if (!window.confirm(`Remover o acesso de ${u.email}? (o login não é apagado, só perde acesso a esta empresa)`)) return
+    setMsg(null)
+    const res = await revokeUser(u.id)
+    if (!res.ok) {
+      setMsg({ tone: 'err', text: res.error ?? 'Falha ao remover acesso.' })
+      return
+    }
+    void load()
+  }
+
+  return (
+    <section className="card p-5">
+      <div className="flex items-center gap-2">
+        <Users className="h-4 w-4 text-brand-600" aria-hidden />
+        <h2 className="font-display text-sm font-semibold text-gray-900">Usuários &amp; permissões (admin)</h2>
+      </div>
+      <p className="mt-1 text-sm text-gray-500">
+        Crie logins de acesso ao CRM e defina o papel. <b>Admin</b> gerencia créditos e usuários; <b>Membro</b> só opera.
+      </p>
+
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className="text-sm font-medium text-gray-700">E-mail</span>
+          <input type="email" className="input mt-1 w-56" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium text-gray-700">Senha</span>
+          <input
+            type="password"
+            className="input mt-1 w-40"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="mín. 6 caracteres"
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium text-gray-700">Papel</span>
+          <select className="input mt-1" value={role} onChange={(e) => setRole(e.target.value as 'admin' | 'member')}>
+            <option value="member">Membro</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+        <button type="button" className="btn-primary" onClick={() => void add()} disabled={busy}>
+          <UserPlus className="h-4 w-4" aria-hidden />
+          {busy ? 'Criando…' : 'Criar usuário'}
+        </button>
+        {msg && (
+          <span className={`text-sm ${msg.tone === 'ok' ? 'text-emerald-700' : 'text-red-700'}`}>{msg.text}</span>
+        )}
+      </div>
+
+      <div className="mt-4 divide-y divide-gray-100 border-t border-gray-100">
+        {loading ? (
+          <p className="py-3 text-sm text-gray-400">Carregando usuários…</p>
+        ) : users.length === 0 ? (
+          <p className="py-3 text-sm text-gray-400">Nenhum usuário com acesso ainda.</p>
+        ) : (
+          users.map((u) => (
+            <div key={u.id} className="flex items-center justify-between gap-2 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-gray-800">{u.email}</p>
+                {u.created_at && (
+                  <p className="text-xs text-gray-400">desde {formatDate(u.created_at)}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusBadge status={u.role === 'admin' ? 'Admin' : 'Membro'} tone={u.role === 'admin' ? 'ok' : 'neutral'} />
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-md border border-gray-300 p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600"
+                  onClick={() => void revoke(u)}
+                  title="Remover acesso"
+                  aria-label={`Remover acesso de ${u.email}`}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  )
+}
 
 function AdminCreditsSection() {
   const { data: credits } = useEnrichmentCredits()
@@ -171,6 +298,7 @@ export default function Settings() {
 
       <div className="space-y-6">
         {isAdmin && <AdminCreditsSection />}
+        {isAdmin && <AdminUsersSection />}
         <CampaignDelaySection />
 
         <section>
