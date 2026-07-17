@@ -8,6 +8,9 @@
 --    movimento — nunca se escreve stock direto; sempre insere um movimento.
 --    Assim tudo fica auditável e reversível (basta lançar o movimento inverso).
 
+-- A tabela products já existe neste banco (catálogo do Levy, com sku/name/
+-- price/marketplace/...), mas sem saldo. Criamos se não existir e, de todo
+-- jeito, garantimos a coluna stock (é o que faltava na 1ª execução).
 create table if not exists public.products (
   id uuid primary key default gen_random_uuid(),
   client_id uuid not null references public.clients (id) on delete cascade,
@@ -20,6 +23,8 @@ create table if not exists public.products (
   updated_at timestamptz not null default now(),
   unique (client_id, sku)
 );
+
+alter table public.products add column if not exists stock numeric not null default 0;
 
 create table if not exists public.stock_movements (
   id uuid primary key default gen_random_uuid(),
