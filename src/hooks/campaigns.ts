@@ -9,6 +9,7 @@ export interface WaCampaign {
   client_id: string
   name: string
   message_body: string
+  media_url?: string | null
   audience: {
     type?: string
     segment?: string
@@ -101,10 +102,25 @@ export async function deleteCampaign(id: string): Promise<{ ok: boolean; error?:
   return { ok: true }
 }
 
+/** Sobe uma imagem de campanha para o storage e devolve a URL pública. */
+export async function uploadCampaignImage(file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+  const { error } = await supabase.storage.from('campaign-media').upload(path, file, {
+    cacheControl: '3600',
+    upsert: false,
+    contentType: file.type || 'image/jpeg',
+  })
+  if (error) return { ok: false, error: error.message }
+  const { data } = supabase.storage.from('campaign-media').getPublicUrl(path)
+  return { ok: true, url: data.publicUrl }
+}
+
 export async function campaignAction(payload: {
   action: 'preview' | 'create' | 'start'
   name?: string
   message_body?: string
+  media_url?: string | null
   audience?: AudienceInput
   campaign_id?: string
 }): Promise<CampaignActionResponse> {

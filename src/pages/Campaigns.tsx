@@ -1,13 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Cake, CheckCheck, Copy, Eye, Megaphone, Pencil, Plus, Rocket, Search, Trash2, Users, X } from 'lucide-react'
+import { Cake, CheckCheck, Copy, Eye, Image as ImageIcon, Megaphone, Pencil, Plus, Rocket, Search, Trash2, Users, X } from 'lucide-react'
 import { useBirthdaySettings, useSaveBirthdaySettings } from '../hooks/settings'
 import {
   campaignAction,
   campaignCounts,
   deleteCampaign,
   updateCampaign,
+  uploadCampaignImage,
   useWaCampaigns,
   type AudienceInput,
   type WaCampaign,
@@ -260,9 +261,28 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
   const [minSpent, setMinSpent] = useState(300)
   const [testNumbers, setTestNumbers] = useState('')
   const [selected, setSelected] = useState<CustomerLite[]>([])
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [uploadingImg, setUploadingImg] = useState(false)
   const [preview, setPreview] = useState<{ total: number; skipped: number; sample: string[] } | null>(null)
   const [busy, setBusy] = useState<'preview' | 'create' | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const handleImage = async (file: File | undefined) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Selecione um arquivo de imagem.')
+      return
+    }
+    setUploadingImg(true)
+    setError(null)
+    const res = await uploadCampaignImage(file)
+    setUploadingImg(false)
+    if (!res.ok || !res.url) {
+      setError(res.error ?? 'Falha ao subir a imagem.')
+      return
+    }
+    setMediaUrl(res.url)
+  }
 
   // Preenche o formulário quando vem um preset (ex.: da tela de Segmentos)
   useEffect(() => {
@@ -319,6 +339,7 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
       action: 'create',
       name: name.trim(),
       message_body: message.trim(),
+      media_url: mediaUrl,
       audience: buildAudience(),
     })
     setBusy(null)
@@ -331,6 +352,7 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
     setTestNumbers('')
     setSelected([])
     setChoice('test')
+    setMediaUrl(null)
     setPreview(null)
     onCreated()
   }
@@ -438,6 +460,41 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
           A mensagem sai pelo número de WhatsApp conectado no uazapi, como texto normal.
         </span>
       </label>
+
+      <div className="mt-3">
+        <span className="text-sm font-medium text-gray-700">Imagem (opcional)</span>
+        <p className="mb-1 text-xs text-gray-500">
+          Se anexar, a campanha vai como foto + legenda (a mensagem acima vira a legenda) — chama mais
+          atenção e o link fica tocável.
+        </p>
+        {mediaUrl ? (
+          <div className="flex items-center gap-3">
+            <img src={mediaUrl} alt="Prévia da imagem" className="h-20 w-20 rounded-md border border-gray-200 object-cover" />
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              onClick={() => setMediaUrl(null)}
+            >
+              <X className="h-4 w-4" aria-hidden /> Remover imagem
+            </button>
+          </div>
+        ) : (
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+            <ImageIcon className="h-4 w-4 text-brand-600" aria-hidden />
+            {uploadingImg ? 'Enviando imagem…' : 'Anexar imagem'}
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              disabled={uploadingImg}
+              onChange={(e) => {
+                void handleImage(e.target.files?.[0])
+                e.target.value = ''
+              }}
+            />
+          </label>
+        )}
+      </div>
 
       {preview && (
         <div className="mt-3 rounded-md border border-brand-100 bg-brand-50 px-3 py-2 text-sm text-gray-800">
