@@ -548,20 +548,25 @@ function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged
   const [editMessage, setEditMessage] = useState(campaign.message_body)
   const [savingEdit, setSavingEdit] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [batchSize, setBatchSize] = useState(50)
   const counts = campaignCounts(campaign)
-  const statusInfo = STATUS_LABEL[campaign.status] ?? { label: campaign.status, tone: 'neutral' as const }
   const progress = counts.total > 0 ? Math.round(((counts.total - counts.pending) / counts.total) * 100) : 0
+  const sending = campaign.status === 'sending'
+  // "parcial" = já enviou parte e ainda há pendentes (disparo em lotes)
+  const partial = counts.sent > 0 && counts.pending > 0
+  const statusInfo = partial
+    ? { label: `Parcial · ${counts.total - counts.pending}/${counts.total}`, tone: 'warn' as const }
+    : STATUS_LABEL[campaign.status] ?? { label: campaign.status, tone: 'neutral' as const }
+  // pode disparar sempre que houver pendentes e não estiver enviando agora
+  const canDispatch = counts.pending > 0 && !sending && !editing
 
   const handleStart = async () => {
-    if (
-      !window.confirm(
-        `Disparar "${campaign.name}" agora para ${counts.total} contato${counts.total === 1 ? '' : 's'}?`,
-      )
-    )
+    const n = Math.min(batchSize, counts.pending)
+    if (!window.confirm(`Disparar para ${n} contato${n === 1 ? '' : 's'} agora? (restam ${counts.pending} pendentes)`))
       return
     setStarting(true)
     setError(null)
-    const res = await campaignAction({ action: 'start', campaign_id: campaign.id })
+    const res = await campaignAction({ action: 'start', campaign_id: campaign.id, limit: batchSize })
     setStarting(false)
     if (!res.ok) {
       setError(res.error ?? 'Falha ao iniciar o disparo.')
@@ -667,11 +672,29 @@ function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged
             <Copy className="h-4 w-4" aria-hidden />
             {duplicating ? 'Duplicando…' : 'Duplicar'}
           </button>
-          {campaign.status === 'draft' && !editing && (
-            <button type="button" className="btn-primary !py-1.5" onClick={() => void handleStart()} disabled={starting}>
-              <Rocket className="h-4 w-4" aria-hidden />
-              {starting ? 'Iniciando…' : 'Disparar'}
-            </button>
+          {canDispatch && (
+            <div className="flex items-center gap-1.5">
+              <label className="flex items-center gap-1 text-xs text-gray-500" title="Quantos disparar por vez">
+                <input
+                  type="number"
+                  min={1}
+                  max={counts.pending}
+                  className="input w-16 !py-1"
+                  value={batchSize}
+                  onChange={(e) => setBatchSize(Math.max(1, Number(e.target.value) || 1))}
+                  aria-label="Quantos por disparo"
+                />
+                por vez
+              </label>
+              <button type="button" className="btn-primary !py-1.5" onClick={() => void handleStart()} disabled={starting}>
+                <Rocket className="h-4 w-4" aria-hidden />
+                {starting
+                  ? 'Iniciando…'
+                  : counts.sent > 0
+                    ? `Enviar próximos ${Math.min(batchSize, counts.pending)}`
+                    : 'Disparar'}
+              </button>
+            </div>
           )}
           {!editing && (
             <button

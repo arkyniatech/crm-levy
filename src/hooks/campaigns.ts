@@ -123,6 +123,7 @@ export async function campaignAction(payload: {
   media_url?: string | null
   audience?: AudienceInput
   campaign_id?: string
+  limit?: number
 }): Promise<CampaignActionResponse> {
   if (!CAMPAIGN_URL) {
     return { ok: false, error: 'VITE_N8N_WA_CAMPAIGN_URL não está configurada no .env.' }
