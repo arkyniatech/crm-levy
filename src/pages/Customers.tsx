@@ -15,9 +15,12 @@ import { useEnrichmentCredits, useSpendCredits } from '../hooks/settings'
 import { formatCurrency, formatDate, formatPhone, maskCpf, toE164 } from '../lib/format'
 import { EmptyState, ErrorState, LoadingRows, PageHeader, Pagination, StatusBadge } from '../components/ui'
 
-const TABS: { key: EnrichFilter; label: string }[] = [
+type CustTab = EnrichFilter | 'no_phone'
+
+const TABS: { key: CustTab; label: string }[] = [
   { key: 'pending', label: 'Pendentes' },
   { key: 'enriched', label: 'Enriquecidos' },
+  { key: 'no_phone', label: 'Sem telefone' },
 ]
 
 function EnrichControl() {
@@ -215,19 +218,25 @@ export default function Customers() {
   const [input, setInput] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
-  const [tab, setTab] = useState<EnrichFilter>('pending')
+  const [tab, setTab] = useState<CustTab>('pending')
   const [tabTouched, setTabTouched] = useState(false)
   const [contact, setContact] = useState<ContactFilter>('all')
   const [showAdd, setShowAdd] = useState(false)
   const navigate = useNavigate()
-  const { data, isLoading, error, isFetching } = useCustomers(search, page, tab, contact)
+  // A aba "Sem telefone" é um atalho: mostra todos (qualquer status) só sem telefone.
+  const isNoPhone = tab === 'no_phone'
+  const queryTab: EnrichFilter = isNoPhone ? 'all' : (tab as EnrichFilter)
+  const queryContact: ContactFilter = isNoPhone ? 'without_phone' : contact
+  const { data, isLoading, error, isFetching } = useCustomers(search, page, queryTab, queryContact)
   const { data: stats } = useOutreachStats()
   const pendingCount = stats ? Math.max(0, stats.total - stats.enriched) : null
   const enrichedCount = stats?.enriched ?? null
-  const counts: Record<EnrichFilter, number | null> = {
+  const noPhoneCount = stats ? Math.max(0, stats.total - stats.withPhone) : null
+  const counts: Record<CustTab, number | null> = {
     all: stats?.total ?? null,
     pending: pendingCount,
     enriched: enrichedCount,
+    no_phone: noPhoneCount,
   }
 
   // debounce da busca
@@ -297,20 +306,22 @@ export default function Customers() {
             </button>
           ))}
         </div>
-        <select
-          value={contact}
-          onChange={(e) => {
-            setContact(e.target.value as ContactFilter)
-            setPage(0)
-          }}
-          className="input mb-1.5 w-auto py-1.5 text-sm"
-          aria-label="Filtrar por telefone"
-          title="Filtrar clientes por telefone"
-        >
-          <option value="all">Telefone: todos</option>
-          <option value="with_phone">Só com telefone</option>
-          <option value="without_phone">Só sem telefone</option>
-        </select>
+        {!isNoPhone && (
+          <select
+            value={contact}
+            onChange={(e) => {
+              setContact(e.target.value as ContactFilter)
+              setPage(0)
+            }}
+            className="input mb-1.5 w-auto py-1.5 text-sm"
+            aria-label="Filtrar por telefone"
+            title="Filtrar clientes por telefone"
+          >
+            <option value="all">Telefone: todos</option>
+            <option value="with_phone">Só com telefone</option>
+            <option value="without_phone">Só sem telefone</option>
+          </select>
+        )}
       </div>
 
       <div className={`card overflow-hidden ${isFetching && !isLoading ? 'opacity-70' : ''}`}>
