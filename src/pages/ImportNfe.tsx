@@ -21,6 +21,7 @@ interface NotaResumo {
 interface UploadResult {
   ok: boolean
   error?: string
+  status?: string
   total_nfes?: number
   com_cpf?: number
   sem_cpf?: number
@@ -176,7 +177,24 @@ export default function ImportNfe() {
         </div>
       )}
 
-      {result && (
+      {result?.status === 'processando' && (
+        <div className="mt-6 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin text-brand-600" aria-hidden />
+            <h2 className="font-display text-base font-semibold text-gray-900">
+              {result.total_nfes} nota{result.total_nfes === 1 ? '' : 's'} recebida
+              {result.total_nfes === 1 ? '' : 's'} — processando…
+            </h2>
+          </div>
+          <p className="mt-1 text-sm text-gray-600">
+            O processamento continua em segundo plano. Os clientes vão aparecer na aba{' '}
+            <strong>Clientes</strong> em alguns instantes (atualize a página conforme forem entrando). Pode
+            fechar esta tela.
+          </p>
+        </div>
+      )}
+
+      {result && result.status !== 'processando' && (
         <div className="mt-6">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-emerald-600" aria-hidden />
