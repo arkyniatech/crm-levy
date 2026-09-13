@@ -2,9 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Cake, CheckCheck, Copy, Eye, Image as ImageIcon, Megaphone, Pencil, Plus, Rocket, Search, Trash2, Users, X } from 'lucide-react'
-import { useBirthdaySettings, useSaveBirthdaySettings } from '../hooks/settings'
+import { useBirthdaySettings, useCan, useSaveBirthdaySettings } from '../hooks/settings'
 import {
-  campaignAction,
+  useCampaignAction,
   campaignCounts,
   deleteCampaign,
   updateCampaign,
@@ -254,6 +254,10 @@ function BirthdayCard() {
 }
 
 function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?: CampaignPreset }) {
+  // O colaborador monta campanha sem enxergar a base: nada de escolher cliente
+  // na mão e nada de amostra com nome/telefone na prévia.
+  const canSeeCustomers = useCan('customerData')
+  const campaignAction = useCampaignAction()
   const [name, setName] = useState('')
   const [message, setMessage] = useState('')
   const [choice, setChoice] = useState<AudienceChoice>('test')
@@ -319,7 +323,9 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
     setPreview({
       total: res.total ?? 0,
       skipped: res.skipped_optout ?? 0,
-      sample: (res.sample ?? []).map((s) => (s.name ? `${s.name} (${s.wa_number})` : s.wa_number)),
+      sample: canSeeCustomers
+        ? (res.sample ?? []).map((s) => (s.name ? `${s.name} (${s.wa_number})` : s.wa_number))
+        : [],
     })
   }
 
@@ -386,7 +392,7 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
           >
             <optgroup label="Básico">
               <option value="test">Números de teste (recomendado antes de disparar de verdade)</option>
-              <option value="manual">Clientes selecionados (escolher na mão)</option>
+              {canSeeCustomers && <option value="manual">Clientes selecionados (escolher na mão)</option>}
               <option value="all">Todos os clientes com telefone</option>
               <option value="recent">Compradores dos últimos X dias</option>
             </optgroup>
@@ -445,7 +451,7 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
           O público é recalculado no momento do disparo, a partir dos pedidos e dados dos clientes.
         </p>
       )}
-      {choice === 'manual' && <CustomerPicker selected={selected} onChange={setSelected} />}
+      {choice === 'manual' && canSeeCustomers && <CustomerPicker selected={selected} onChange={setSelected} />}
 
       <label className="mt-3 block">
         <span className="text-sm font-medium text-gray-700">Mensagem</span>
@@ -540,6 +546,7 @@ function NewCampaignForm({ onCreated, preset }: { onCreated: () => void; preset?
 }
 
 function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged: () => void }) {
+  const campaignAction = useCampaignAction()
   const [starting, setStarting] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -786,6 +793,7 @@ function CampaignCard({ campaign, onChanged }: { campaign: WaCampaign; onChanged
 }
 
 export default function Campaigns() {
+  const canSeeCustomers = useCan('customerData')
   const { data: campaigns, isLoading, error } = useWaCampaigns()
   const queryClient = useQueryClient()
   const location = useLocation()
@@ -799,9 +807,12 @@ export default function Campaigns() {
         subtitle="Disparos de WhatsApp para grupos de clientes — com ritmo controlado e opt-out automático"
       />
 
-      <div className="mb-4">
-        <BirthdayCard />
-      </div>
+      {/* Aniversário é config da loja: gravar em app_settings é de admin pra cima */}
+      {canSeeCustomers && (
+        <div className="mb-4">
+          <BirthdayCard />
+        </div>
+      )}
 
       <NewCampaignForm onCreated={refresh} preset={preset} />
 

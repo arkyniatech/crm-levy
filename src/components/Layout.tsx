@@ -17,16 +17,18 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useCompany } from '../context/CompanyContext'
+import { useUserRole } from '../hooks/settings'
+import { can, ROLE_LABEL, type Permission } from '../lib/permissions'
 import { formatCnpj } from '../lib/format'
 
-const NAV = [
-  { to: '/', label: 'Visão Geral', icon: LayoutDashboard, end: true },
-  { to: '/clientes', label: 'Clientes', icon: Users },
-  { to: '/segmentos', label: 'Segmentos', icon: Layers },
-  { to: '/vendas', label: 'Vendas', icon: ShoppingCart },
-  { to: '/produtos', label: 'Produtos', icon: Package },
-  { to: '/campanhas', label: 'Campanhas', icon: Megaphone },
-  { to: '/importar', label: 'Importar NF-e', icon: FileUp },
+const NAV: { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; permission: Permission }[] = [
+  { to: '/', label: 'Visão Geral', icon: LayoutDashboard, end: true, permission: 'dashboard' },
+  { to: '/clientes', label: 'Clientes', icon: Users, permission: 'customers' },
+  { to: '/segmentos', label: 'Segmentos', icon: Layers, permission: 'segments' },
+  { to: '/vendas', label: 'Vendas', icon: ShoppingCart, permission: 'orders' },
+  { to: '/produtos', label: 'Produtos', icon: Package, permission: 'products' },
+  { to: '/campanhas', label: 'Campanhas', icon: Megaphone, permission: 'campaigns' },
+  { to: '/importar', label: 'Importar NF-e', icon: FileUp, permission: 'importNfe' },
 ]
 
 const SOON: { label: string; icon: typeof Settings }[] = []
@@ -42,6 +44,7 @@ function SidebarContent({
 }) {
   const { signOut, session } = useAuth()
   const { clients, activeClient, setActiveClientId } = useCompany()
+  const { data: role } = useUserRole()
 
   return (
     <div className="flex h-full flex-col">
@@ -95,7 +98,7 @@ function SidebarContent({
       )}
 
       <nav className="flex-1 space-y-0.5 px-3 pt-2" aria-label="Navegação principal">
-        {NAV.map(({ to, label, icon: Icon, end }) => (
+        {NAV.filter(({ permission }) => can(role, permission)).map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
@@ -135,7 +138,7 @@ function SidebarContent({
         ))}
       </nav>
 
-      <div className="px-3 pb-1">
+      <div className={can(role, 'settings') ? 'px-3 pb-1' : 'hidden'}>
         <NavLink
           to="/configuracoes"
           onClick={onNavigate}
@@ -157,9 +160,14 @@ function SidebarContent({
 
       <div className="border-t border-white/10 px-3 py-3">
         {!collapsed && (
-          <p className="mb-2 truncate px-2.5 text-xs text-slate-500" title={session?.user.email ?? ''}>
-            {session?.user.email}
-          </p>
+          <>
+            <p className="truncate px-2.5 text-xs text-slate-500" title={session?.user.email ?? ''}>
+              {session?.user.email}
+            </p>
+            {role && (
+              <p className="mb-2 px-2.5 text-[11px] font-medium text-slate-600">{ROLE_LABEL[role]}</p>
+            )}
+          </>
         )}
         <button
           type="button"

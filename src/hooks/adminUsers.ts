@@ -5,9 +5,13 @@ const ADMIN_URL = import.meta.env.VITE_N8N_ADMIN_USERS_URL as string | undefined
 export interface AdminUser {
   id: string
   email: string
+  /** 'admin' | 'collaborator' — papel NESTA loja. Master não aparece na lista. */
   role: string
   created_at?: string
 }
+
+/** Papéis que se pode conceder pela tela. `master` só no SQL, na mão. */
+export type GrantableRole = 'admin' | 'collaborator'
 
 interface AdminResponse {
   ok: boolean
@@ -35,14 +39,25 @@ async function call(payload: Record<string, unknown>): Promise<AdminResponse> {
   }
 }
 
-export function listUsers(): Promise<AdminResponse> {
-  return call({ action: 'list' })
+/**
+ * Todas as chamadas levam client_id: o acesso é concedido POR LOJA.
+ * O n8n não deve confiar nesse valor — tem que conferir, pelo JWT, se quem
+ * chamou é master ou admin daquela loja antes de gravar. Ver
+ * docs/n8n-contrato-acessos.md.
+ */
+export function listUsers(clientId: string): Promise<AdminResponse> {
+  return call({ action: 'list', client_id: clientId })
 }
 
-export function createUser(email: string, password: string, role: 'admin' | 'member'): Promise<AdminResponse> {
-  return call({ action: 'create', email, password, role })
+export function createUser(
+  email: string,
+  password: string,
+  role: GrantableRole,
+  clientId: string,
+): Promise<AdminResponse> {
+  return call({ action: 'create', email, password, role, client_id: clientId })
 }
 
-export function revokeUser(userId: string): Promise<AdminResponse> {
-  return call({ action: 'revoke', user_id: userId })
+export function revokeUser(userId: string, clientId: string): Promise<AdminResponse> {
+  return call({ action: 'revoke', user_id: userId, client_id: clientId })
 }

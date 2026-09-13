@@ -1,5 +1,9 @@
+import type { ReactElement } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
+import { useCompany } from './context/CompanyContext'
+import { useUserRole } from './hooks/settings'
+import { can, homeRouteFor, type Permission } from './lib/permissions'
 import { isSupabaseConfigured } from './lib/supabase'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -28,6 +32,60 @@ function ProtectedRoutes() {
   return <Layout />
 }
 
+/**
+ * Barra a rota quando o papel do usuário na loja ativa não alcança a tela.
+ * É conveniência de navegação: quem barra de verdade é o RLS no Supabase.
+ */
+function RequirePermission({ permission, children }: { permission: Permission; children: ReactElement }) {
+  const { activeClient, isLoading: loadingCompany } = useCompany()
+  const { data: role, isPending } = useUserRole()
+
+  if (loadingCompany || (activeClient && isPending)) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center text-sm text-gray-500">Carregando…</div>
+    )
+  }
+
+  // Logou, mas não está mapeado em loja nenhuma (o RLS devolve lista vazia)
+  if (!activeClient) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center px-4">
+        <div className="card max-w-md p-6 text-center">
+          <h1 className="font-display text-lg font-semibold">Nenhuma loja liberada</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Seu login existe, mas ainda não está ligado a nenhuma loja. Peça a um administrador para liberar
+            o acesso.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Sem papel nenhum nesta loja: tela explicativa, não redirect (senão gira em falso)
+  if (!role) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center px-4">
+        <div className="card max-w-md p-6 text-center">
+          <h1 className="font-display text-lg font-semibold">Sem acesso a esta loja</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Sua conta não tem papel definido em <strong>{activeClient.name ?? 'esta loja'}</strong>. Peça a um
+            administrador para liberar o acesso.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!can(role, permission)) return <Navigate to={homeRouteFor(role)} replace />
+  return children
+}
+
+/** Rota desconhecida: manda para a home que o papel permite abrir. */
+function FallbackRoute() {
+  const { data: role } = useUserRole()
+  return <Navigate to={homeRouteFor(role)} replace />
+}
+
 export default function App() {
   if (!isSupabaseConfigured) {
     return (
@@ -48,17 +106,44 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route element={<ProtectedRoutes />}>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/clientes" element={<Customers />} />
-        <Route path="/clientes/:id" element={<CustomerDetail />} />
-        <Route path="/segmentos" element={<Segments />} />
-        <Route path="/vendas" element={<Orders />} />
-        <Route path="/produtos" element={<Products />} />
-        <Route path="/importar" element={<ImportNfe />} />
-        <Route path="/campanhas" element={<Campaigns />} />
-        <Route path="/configuracoes" element={<Settings />} />
+        <Route
+          path="/"
+          element={<RequirePermission permission="dashboard"><Dashboard /></RequirePermission>}
+        />
+        <Route
+          path="/clientes"
+          element={<RequirePermission permission="customers"><Customers /></RequirePermission>}
+        />
+        <Route
+          path="/clientes/:id"
+          element={<RequirePermission permission="customers"><CustomerDetail /></RequirePermission>}
+        />
+        <Route
+          path="/segmentos"
+          element={<RequirePermission permission="segments"><Segments /></RequirePermission>}
+        />
+        <Route
+          path="/vendas"
+          element={<RequirePermission permission="orders"><Orders /></RequirePermission>}
+        />
+        <Route
+          path="/produtos"
+          element={<RequirePermission permission="products"><Products /></RequirePermission>}
+        />
+        <Route
+          path="/importar"
+          element={<RequirePermission permission="importNfe"><ImportNfe /></RequirePermission>}
+        />
+        <Route
+          path="/campanhas"
+          element={<RequirePermission permission="campaigns"><Campaigns /></RequirePermission>}
+        />
+        <Route
+          path="/configuracoes"
+          element={<RequirePermission permission="settings"><Settings /></RequirePermission>}
+        />
         <Route path="/integracoes" element={<Navigate to="/configuracoes" replace />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<FallbackRoute />} />
       </Route>
     </Routes>
   )

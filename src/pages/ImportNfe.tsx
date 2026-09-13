@@ -4,6 +4,8 @@ import { CheckCircle2, FileArchive, FileCode2, Loader2, UploadCloud, XCircle } f
 import { supabase } from '../lib/supabase'
 import { formatCurrency, formatDateTime, maskCpf } from '../lib/format'
 import { ErrorState, PageHeader } from '../components/ui'
+import { useCan } from '../hooks/settings'
+import { useCompany } from '../context/CompanyContext'
 
 const WEBHOOK_URL = import.meta.env.VITE_N8N_NFE_WEBHOOK_URL as string | undefined
 
@@ -30,6 +32,9 @@ interface UploadResult {
 }
 
 export default function ImportNfe() {
+  // O colaborador importa a nota, mas não vê o comprador que ela gerou.
+  const canSeeCustomers = useCan('customerData')
+  const { activeClient } = useCompany()
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -64,6 +69,8 @@ export default function ImportNfe() {
       const form = new FormData()
       form.append('data', file)
       form.append('deduct_stock', deductStock ? 'true' : 'false')
+      // Diz ao n8n a que loja a nota pertence (ele confere o papel pelo JWT)
+      if (activeClient) form.append('client_id', activeClient.id)
       const res = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -235,8 +242,8 @@ export default function ImportNfe() {
                   <tr>
                     <th className="th">NF</th>
                     <th className="th">Emissão</th>
-                    <th className="th">Comprador</th>
-                    <th className="th">CPF</th>
+                    {canSeeCustomers && <th className="th">Comprador</th>}
+                    {canSeeCustomers && <th className="th">CPF</th>}
                     <th className="th">Pedido (ref.)</th>
                     <th className="th text-right">Itens</th>
                     <th className="th text-right">Valor</th>
@@ -247,16 +254,18 @@ export default function ImportNfe() {
                     <tr key={n.chave_acesso || n.numero_nf} className="hover:bg-gray-50">
                       <td className="td tabular-nums">{n.numero_nf || '—'}</td>
                       <td className="td tabular-nums">{formatDateTime(n.data_emissao)}</td>
-                      <td className="td">{n.buyer_name || '—'}</td>
-                      <td className="td tabular-nums">
-                        {n.buyer_cpf ? (
-                          maskCpf(n.buyer_cpf)
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-amber-700">
-                            <XCircle className="h-3.5 w-3.5" aria-hidden /> sem CPF
-                          </span>
-                        )}
-                      </td>
+                      {canSeeCustomers && <td className="td">{n.buyer_name || '—'}</td>}
+                      {canSeeCustomers && (
+                        <td className="td tabular-nums">
+                          {n.buyer_cpf ? (
+                            maskCpf(n.buyer_cpf)
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-amber-700">
+                              <XCircle className="h-3.5 w-3.5" aria-hidden /> sem CPF
+                            </span>
+                          )}
+                        </td>
+                      )}
                       <td className="td tabular-nums">{n.order_ref || '—'}</td>
                       <td className="td text-right tabular-nums">{n.itens}</td>
                       <td className="td text-right font-medium tabular-nums">

@@ -7,73 +7,123 @@ import {
   useEnrichmentCredits,
   useSaveCredits,
 } from '../hooks/settings'
-import { listUsers, createUser, revokeUser, type AdminUser } from '../hooks/adminUsers'
+import { listUsers, createUser, revokeUser, type AdminUser, type GrantableRole } from '../hooks/adminUsers'
+import { useCompany } from '../context/CompanyContext'
+import { can, ROLE_LABEL } from '../lib/permissions'
 import StoresGrid from '../components/StoresGrid'
 import { formatDate } from '../lib/format'
 import { PageHeader, StatusBadge } from '../components/ui'
 
-function AdminUsersSection() {
+function AdminUsersSection({ isMaster }: { isMaster: boolean }) {
+  const { clients, activeClient } = useCompany()
+  // Master escolhe a loja; admin só mexe na loja em que está.
+  const [targetClientId, setTargetClientId] = useState<string | null>(activeClient?.id ?? null)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<'admin' | 'member'>('member')
+  const [role, setRole] = useState<GrantableRole>('collaborator')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
 
-  const load = async () => {
-    setLoading(true)
-    const res = await listUsers()
-    setLoading(false)
-    if (res.ok) setUsers(res.users ?? [])
-    else setMsg({ tone: 'err', text: res.error ?? 'Falha ao listar usuários.' })
-  }
+  const clientId = (isMaster ? targetClientId : activeClient?.id) ?? activeClient?.id ?? null
+  const targetClient = clients.find((c) => c.id === clientId) ?? activeClient
+
   useEffect(() => {
-    void load()
-  }, [])
+    if (!targetClientId && activeClient) setTargetClientId(activeClient.id)
+  }, [activeClient, targetClientId])
+
+  useEffect(() => {
+    if (!clientId) return
+    let cancelado = false
+    setLoading(true)
+    void listUsers(clientId).then((res) => {
+      if (cancelado) return
+      setLoading(false)
+      if (res.ok) setUsers(res.users ?? [])
+      else setMsg({ tone: 'err', text: res.error ?? 'Falha ao listar usuários.' })
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [clientId])
+
+  const reload = async () => {
+    if (!clientId) return
+    const res = await listUsers(clientId)
+    if (res.ok) setUsers(res.users ?? [])
+  }
 
   const add = async () => {
+    if (!clientId) return
     if (!email.trim() || password.length < 6) {
       setMsg({ tone: 'err', text: 'Informe e-mail e uma senha de pelo menos 6 caracteres.' })
       return
     }
     setBusy(true)
     setMsg(null)
-    const res = await createUser(email.trim(), password, role)
+    const res = await createUser(email.trim(), password, role, clientId)
     setBusy(false)
     if (!res.ok) {
       setMsg({ tone: 'err', text: res.error ?? 'Falha ao criar usuário.' })
       return
     }
-    setMsg({ tone: 'ok', text: 'Usuário criado com acesso.' })
+    setMsg({
+      tone: 'ok',
+      text: `Acesso de ${ROLE_LABEL[role].toLowerCase()} criado em ${targetClient?.name ?? 'esta loja'}.`,
+    })
     setEmail('')
     setPassword('')
-    setRole('member')
-    void load()
+    setRole('collaborator')
+    void reload()
   }
 
   const revoke = async (u: AdminUser) => {
-    if (!window.confirm(`Remover o acesso de ${u.email}? (o login não é apagado, só perde acesso a esta empresa)`)) return
+    if (!clientId) return
+    if (
+      !window.confirm(
+        `Remover o acesso de ${u.email} em ${targetClient?.name ?? 'esta loja'}? ` +
+          '(o login continua existindo, só perde acesso a esta loja)',
+      )
+    )
+      return
     setMsg(null)
-    const res = await revokeUser(u.id)
+    const res = await revokeUser(u.id, clientId)
     if (!res.ok) {
       setMsg({ tone: 'err', text: res.error ?? 'Falha ao remover acesso.' })
       return
     }
-    void load()
+    void reload()
   }
 
   return (
     <section className="card p-5">
       <div className="flex items-center gap-2">
         <Users className="h-4 w-4 text-brand-600" aria-hidden />
-        <h2 className="font-display text-sm font-semibold text-gray-900">Usuários &amp; permissões (admin)</h2>
+        <h2 className="font-display text-sm font-semibold text-gray-900">Acessos da loja</h2>
       </div>
       <p className="mt-1 text-sm text-gray-500">
-        Crie logins de acesso ao CRM e defina o papel. <b>Admin</b> gerencia créditos e usuários; <b>Membro</b> só opera.
+        O acesso vale <b>por loja</b>. <b>Administrador</b> vê e faz tudo dentro dela;{' '}
+        <b>Colaborador</b> só importa NF-e e opera campanhas — sem acesso à base de clientes, vendas e produtos.
       </p>
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
+        {isMaster && (
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Loja</span>
+            <select
+              className="input mt-1 w-56"
+              value={clientId ?? ''}
+              onChange={(e) => setTargetClientId(e.target.value)}
+            >
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name ?? 'Sem nome'}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="block">
           <span className="text-sm font-medium text-gray-700">E-mail</span>
           <input type="email" className="input mt-1 w-56" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -90,14 +140,14 @@ function AdminUsersSection() {
         </label>
         <label className="block">
           <span className="text-sm font-medium text-gray-700">Papel</span>
-          <select className="input mt-1" value={role} onChange={(e) => setRole(e.target.value as 'admin' | 'member')}>
-            <option value="member">Membro</option>
-            <option value="admin">Admin</option>
+          <select className="input mt-1" value={role} onChange={(e) => setRole(e.target.value as GrantableRole)}>
+            <option value="collaborator">Colaborador</option>
+            <option value="admin">Administrador</option>
           </select>
         </label>
         <button type="button" className="btn-primary" onClick={() => void add()} disabled={busy}>
           <UserPlus className="h-4 w-4" aria-hidden />
-          {busy ? 'Criando…' : 'Criar usuário'}
+          {busy ? 'Criando…' : 'Criar acesso'}
         </button>
         {msg && (
           <span className={`text-sm ${msg.tone === 'ok' ? 'text-emerald-700' : 'text-red-700'}`}>{msg.text}</span>
@@ -108,7 +158,7 @@ function AdminUsersSection() {
         {loading ? (
           <p className="py-3 text-sm text-gray-400">Carregando usuários…</p>
         ) : users.length === 0 ? (
-          <p className="py-3 text-sm text-gray-400">Nenhum usuário com acesso ainda.</p>
+          <p className="py-3 text-sm text-gray-400">Nenhum acesso nesta loja ainda.</p>
         ) : (
           users.map((u) => (
             <div key={u.id} className="flex items-center justify-between gap-2 py-2">
@@ -119,7 +169,10 @@ function AdminUsersSection() {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <StatusBadge status={u.role === 'admin' ? 'Admin' : 'Membro'} tone={u.role === 'admin' ? 'ok' : 'neutral'} />
+                <StatusBadge
+                  status={u.role === 'admin' ? 'Administrador' : 'Colaborador'}
+                  tone={u.role === 'admin' ? 'ok' : 'neutral'}
+                />
                 <button
                   type="button"
                   className="inline-flex items-center justify-center rounded-md border border-gray-300 p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600"
@@ -293,14 +346,14 @@ function CampaignDelaySection() {
 export default function Settings() {
   const { data: role } = useUserRole()
   const isMaster = role === 'master'
-  const canManageUsers = role === 'master' || role === 'admin'
+  const canManageUsers = can(role, 'manageUsers')
   return (
     <div>
       <PageHeader title="Configurações" subtitle="Ajustes da operação e status das integrações" />
 
       <div className="space-y-6">
         {isMaster && <AdminCreditsSection />}
-        {canManageUsers && <AdminUsersSection />}
+        {canManageUsers && <AdminUsersSection isMaster={isMaster} />}
         <CampaignDelaySection />
 
         <section>

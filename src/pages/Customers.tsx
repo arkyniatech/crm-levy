@@ -11,6 +11,7 @@ import {
   type EnrichFilter,
 } from '../hooks/queries'
 import { enrichCustomers } from '../hooks/enrich'
+import { useCompany } from '../context/CompanyContext'
 import { useEnrichmentCredits, useSpendCredits } from '../hooks/settings'
 import { formatCurrency, formatDate, formatPhone, maskCpf, toE164 } from '../lib/format'
 import { EmptyState, ErrorState, LoadingRows, PageHeader, Pagination, StatusBadge } from '../components/ui'
@@ -31,6 +32,7 @@ function EnrichControl() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
   const queryClient = useQueryClient()
+  const { activeClient } = useCompany()
 
   const run = async () => {
     if (balance <= 0) {
@@ -39,7 +41,7 @@ function EnrichControl() {
     }
     setBusy(true)
     setMsg(null)
-    const res = await enrichCustomers(Math.max(1, Math.min(limit, balance)))
+    const res = await enrichCustomers(Math.max(1, Math.min(limit, balance)), activeClient?.id)
     setBusy(false)
     if (!res.ok) {
       setMsg({ tone: 'err', text: res.error ?? 'Falha ao enriquecer.' })

@@ -2,26 +2,34 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useCompany } from '../context/CompanyContext'
 import { useAuth } from '../context/AuthContext'
+import { can, type Permission, type Role } from '../lib/permissions'
 
-export type UserRole = 'master' | 'admin' | 'member'
+export type UserRole = Role
 
-/** Papel do usuário logado (crm_user_roles). Master edita créditos; admin+master gerem usuários. */
+/**
+ * Papel do usuário logado NA LOJA ativa — vem da função crm_role_in() no banco,
+ * a mesma verdade que o RLS usa. `master` é global (vale em toda loja);
+ * `admin` e `collaborator` valem só na loja em questão. `null` = sem acesso.
+ */
 export function useUserRole() {
   const { session } = useAuth()
+  const { activeClient } = useCompany()
   const userId = session?.user.id
   return useQuery({
-    queryKey: ['user-role', userId],
-    enabled: Boolean(userId),
-    queryFn: async (): Promise<UserRole> => {
-      const { data, error } = await supabase
-        .from('crm_user_roles')
-        .select('role')
-        .eq('user_id', userId!)
-        .maybeSingle()
-      if (error || !data) return 'member' // sem papel definido → membro
-      return (data.role as UserRole) || 'member'
+    queryKey: ['user-role', userId, activeClient?.id],
+    enabled: Boolean(userId && activeClient),
+    queryFn: async (): Promise<Role | null> => {
+      const { data, error } = await supabase.rpc('crm_role_in', { p_client_id: activeClient!.id })
+      if (error || !data) return null
+      return data as Role
     },
   })
+}
+
+/** Açúcar: `const podeVerClientes = useCan('customerData')`. */
+export function useCan(permission: Permission): boolean {
+  const { data: role } = useUserRole()
+  return can(role, permission)
 }
 
 /** Recarrega/ajusta o saldo de créditos (uso do admin). */

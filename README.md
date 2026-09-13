@@ -57,6 +57,36 @@ SPA. Configure as variáveis `VITE_*` em Site settings → Environment variables
    `BASE_PATH=/crm/ npm run build` e ajuste o `.htaccess` da subpasta
    (`RewriteBase /crm/` e destino `/crm/index.html`).
 
+## Perfis de acesso
+
+Três papéis. `master` é global; os outros valem **por loja** (uma linha de
+`clients`), então a mesma pessoa pode ser admin numa loja e colaborador noutra.
+
+| | master | admin (da loja) | colaborador (da loja) |
+|---|---|---|---|
+| Lojas que enxerga | todas | a sua | a sua |
+| Visão Geral, Clientes, Segmentos, Vendas, Produtos | sim | sim | **não** |
+| Importar NF-e | sim | sim | sim |
+| Campanhas (criar e disparar) | sim | sim | sim |
+| Ver nome/telefone/CPF de cliente | sim | sim | **não** |
+| Criar e revogar acessos | todas as lojas | só na sua | não |
+| Créditos de enriquecimento | sim | não | não |
+
+O colaborador monta campanha por segmento ou por números de teste digitados na
+mão; ele não escolhe cliente da base nem vê a amostra da prévia, e acompanha o
+disparo pela contagem por status (função `crm_campaign_counts`).
+
+Para aplicar: rode `supabase/access-roles.sql` no SQL Editor (troque o e-mail do
+Levy no bloco 6 antes). Depois ajuste os fluxos n8n — sem isso a metade de
+servidor continua aberta: veja `docs/n8n-contrato-acessos.md`.
+
+Master se concede na mão, por SQL:
+
+```sql
+insert into public.crm_masters (user_id)
+select id from auth.users where email = 'fulano@empresa.com';
+```
+
 ## Segurança
 
 - O frontend consulta apenas: `clients`, `stores`, `customers`, `orders`,

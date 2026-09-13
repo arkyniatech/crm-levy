@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useCompany } from '../context/CompanyContext'
+import { useUserRole } from './settings'
+import { can } from '../lib/permissions'
 
 const CAMPAIGN_URL = import.meta.env.VITE_N8N_WA_CAMPAIGN_URL as string | undefined
 
@@ -23,6 +25,8 @@ export interface WaCampaign {
   finished_at: string | null
   created_at: string
   wa_campaign_recipients?: { status: string }[]
+  /** Preenchido pelo hook: o colaborador recebe daqui, sem ler os telefones. */
+  counts?: CampaignCounts
 }
 
 export interface CampaignCounts {
@@ -34,34 +38,67 @@ export interface CampaignCounts {
   failed: number
 }
 
-export function campaignCounts(c: WaCampaign): CampaignCounts {
-  const counts: CampaignCounts = { total: 0, pending: 0, sent: 0, delivered: 0, read: 0, failed: 0 }
-  for (const r of c.wa_campaign_recipients ?? []) {
-    counts.total += 1
-    if (r.status === 'pending') counts.pending += 1
-    else if (r.status === 'sent') counts.sent += 1
-    else if (r.status === 'delivered') counts.delivered += 1
-    else if (r.status === 'read') counts.read += 1
-    else if (r.status === 'failed' || r.status === 'undelivered') counts.failed += 1
-  }
+function emptyCounts(): CampaignCounts {
+  return { total: 0, pending: 0, sent: 0, delivered: 0, read: 0, failed: 0 }
+}
+
+function addStatus(counts: CampaignCounts, status: string, n: number): void {
+  counts.total += n
+  if (status === 'pending') counts.pending += n
+  else if (status === 'sent') counts.sent += n
+  else if (status === 'delivered') counts.delivered += n
+  else if (status === 'read') counts.read += n
+  else if (status === 'failed' || status === 'undelivered') counts.failed += n
+}
+
+function countsFromRecipients(recipients: { status: string }[]): CampaignCounts {
+  const counts = emptyCounts()
+  for (const r of recipients) addStatus(counts, r.status, 1)
   return counts
+}
+
+export function campaignCounts(c: WaCampaign): CampaignCounts {
+  return c.counts ?? countsFromRecipients(c.wa_campaign_recipients ?? [])
 }
 
 export function useWaCampaigns() {
   const { activeClient } = useCompany()
+  const { data: role } = useUserRole()
+  // Quem não pode ver dado de cliente também não lê wa_campaign_recipients
+  // (a tabela tem wa_number e display_name). Para esses, o progresso vem
+  // agregado da função crm_campaign_counts no banco.
+  const seesRecipients = can(role, 'customerData')
+
   return useQuery({
-    queryKey: ['wa-campaigns', activeClient?.id],
-    enabled: Boolean(activeClient),
+    queryKey: ['wa-campaigns', activeClient?.id, seesRecipients],
+    enabled: Boolean(activeClient && role),
     refetchInterval: (query) =>
       (query.state.data ?? []).some((c) => c.status === 'sending') ? 4_000 : 30_000,
     queryFn: async (): Promise<WaCampaign[]> => {
+      const select = seesRecipients ? '*, wa_campaign_recipients(status)' : '*'
       const { data, error } = await supabase
         .from('wa_campaigns')
-        .select('*, wa_campaign_recipients(status)')
+        .select(select)
         .eq('client_id', activeClient!.id)
         .order('created_at', { ascending: false })
       if (error) throw new Error(error.message)
-      return (data ?? []) as WaCampaign[]
+      const campaigns = (data ?? []) as unknown as WaCampaign[]
+
+      if (seesRecipients) {
+        return campaigns.map((c) => ({ ...c, counts: countsFromRecipients(c.wa_campaign_recipients ?? []) }))
+      }
+
+      const { data: rows, error: rpcError } = await supabase.rpc('crm_campaign_counts', {
+        p_client_id: activeClient!.id,
+      })
+      if (rpcError) throw new Error(rpcError.message)
+      const byCampaign = new Map<string, CampaignCounts>()
+      for (const r of (rows ?? []) as { campaign_id: string; status: string; total: number }[]) {
+        const acc = byCampaign.get(r.campaign_id) ?? emptyCounts()
+        addStatus(acc, r.status, Number(r.total) || 0)
+        byCampaign.set(r.campaign_id, acc)
+      }
+      return campaigns.map((c) => ({ ...c, counts: byCampaign.get(c.id) ?? emptyCounts() }))
     },
   })
 }
@@ -116,7 +153,7 @@ export async function uploadCampaignImage(file: File): Promise<{ ok: boolean; ur
   return { ok: true, url: data.publicUrl }
 }
 
-export async function campaignAction(payload: {
+export interface CampaignActionPayload {
   action: 'preview' | 'create' | 'start'
   name?: string
   message_body?: string
@@ -124,7 +161,11 @@ export async function campaignAction(payload: {
   audience?: AudienceInput
   campaign_id?: string
   limit?: number
-}): Promise<CampaignActionResponse> {
+  /** Loja a que a ação pertence. O n8n confere no JWT se quem chamou pode. */
+  client_id?: string
+}
+
+export async function campaignAction(payload: CampaignActionPayload): Promise<CampaignActionResponse> {
   if (!CAMPAIGN_URL) {
     return { ok: false, error: 'VITE_N8N_WA_CAMPAIGN_URL não está configurada no .env.' }
   }
@@ -145,4 +186,14 @@ export async function campaignAction(payload: {
   } catch {
     return { ok: false, error: 'Não foi possível falar com o serviço de campanhas.' }
   }
+}
+
+/**
+ * campaignAction já carimbado com a loja ativa. Use este nas telas — sem o
+ * client_id o n8n não tem como saber de qual loja é a campanha.
+ */
+export function useCampaignAction() {
+  const { activeClient } = useCompany()
+  return (payload: Omit<CampaignActionPayload, 'client_id'>) =>
+    campaignAction({ ...payload, client_id: activeClient?.id })
 }
