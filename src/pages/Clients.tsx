@@ -5,6 +5,7 @@ import {
   useClientStores,
   useCreateClient,
   useCreateStore,
+  useUpdateClient,
   useUpdateStore,
   type ClientOverview,
 } from '../hooks/admin'
@@ -101,6 +102,62 @@ function NovoCliente() {
   )
 }
 
+/** Renomear o cliente e ajustar o CNPJ, dentro do painel expandido. */
+function DadosDoCliente({ c }: { c: ClientOverview }) {
+  const salvar = useUpdateClient()
+  const [name, setName] = useState(c.name ?? '')
+  const [document, setDocument] = useState(c.document ?? '')
+  const [msg, setMsg] = useState<string | null>(null)
+  const [erro, setErro] = useState<string | null>(null)
+
+  const mudou = name !== (c.name ?? '') || somenteDigitos(document) !== (c.document ?? '')
+
+  const enviar = async (e: FormEvent) => {
+    e.preventDefault()
+    setErro(null)
+    setMsg(null)
+    if (!name.trim()) {
+      setErro('O nome não pode ficar vazio.')
+      return
+    }
+    const cnpj = somenteDigitos(document)
+    if (cnpj && cnpj.length !== 14) {
+      setErro('O CNPJ precisa ter 14 dígitos — ou deixe em branco.')
+      return
+    }
+    try {
+      await salvar.mutateAsync({ id: c.id, name: name.trim(), document: cnpj || null })
+      setMsg('Salvo.')
+    } catch (e) {
+      setErro((e as Error).message)
+    }
+  }
+
+  return (
+    <form onSubmit={enviar} className="flex flex-wrap items-end gap-2 py-4">
+      <label className="block">
+        <span className="text-xs font-medium text-gray-600">Nome do cliente</span>
+        <input className="input mt-1 w-64" value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label className="block">
+        <span className="text-xs font-medium text-gray-600">CNPJ</span>
+        <input
+          className="input mt-1 w-48"
+          value={document}
+          onChange={(e) => setDocument(e.target.value)}
+          placeholder="só números"
+          inputMode="numeric"
+        />
+      </label>
+      <button type="submit" className="btn-secondary" disabled={!mudou || salvar.isPending}>
+        {salvar.isPending ? 'Salvando…' : 'Salvar'}
+      </button>
+      {msg && <span className="text-sm text-emerald-700">{msg}</span>}
+      {erro && <span className="text-sm text-red-700">{erro}</span>}
+    </form>
+  )
+}
+
 /** Lojas (contas de marketplace) de um cliente. */
 function LojasDoCliente({ clientId }: { clientId: string }) {
   const { data: lojas, isLoading, error } = useClientStores(clientId)
@@ -136,7 +193,7 @@ function LojasDoCliente({ clientId }: { clientId: string }) {
   if (isLoading) return <LoadingRows cols={4} rows={2} />
 
   return (
-    <div className="border-t border-gray-100 bg-gray-50/60 px-4 py-4">
+    <div className="pb-4">
       {lojas && lojas.length > 0 ? (
         <div className="divide-y divide-gray-200 rounded-md border border-gray-200 bg-white">
           {lojas.map((s) => (
@@ -260,7 +317,14 @@ function LinhaCliente({ c }: { c: ClientOverview }) {
           </div>
         </div>
       </button>
-      {aberto && <LojasDoCliente clientId={c.id} />}
+      {aberto && (
+        <div className="divide-y divide-gray-200 border-t border-gray-200 bg-gray-50/60 px-4">
+          <DadosDoCliente c={c} />
+          <div className="pt-4">
+            <LojasDoCliente clientId={c.id} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

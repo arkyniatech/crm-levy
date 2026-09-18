@@ -63,6 +63,24 @@ export function useCreateClient() {
   })
 }
 
+export function useUpdateClient() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: { id: string; name: string; document: string | null }) => {
+      const { error } = await supabase
+        .from('clients')
+        .update({ name: input.name, document: input.document })
+        .eq('id', input.id)
+      if (error) throw new Error(error.message)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['clients-overview'] })
+      // o seletor de empresa no topo também mostra o nome
+      void queryClient.invalidateQueries({ queryKey: ['clients'] })
+    },
+  })
+}
+
 export function useCreateStore() {
   const queryClient = useQueryClient()
   return useMutation({
