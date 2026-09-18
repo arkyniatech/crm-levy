@@ -1,11 +1,12 @@
-import { useRef, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, FileArchive, FileCode2, Loader2, UploadCloud, XCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { formatCurrency, formatDateTime, maskCpf } from '../lib/format'
+import { formatCurrency, formatDate, formatDateTime, maskCpf } from '../lib/format'
 import { ErrorState, PageHeader } from '../components/ui'
 import { useCan } from '../hooks/settings'
 import { useCompany } from '../context/CompanyContext'
+import { RESUMO_TIMEOUT_MS, useNfeImport } from '../hooks/nfeImports'
 
 const WEBHOOK_URL = import.meta.env.VITE_N8N_NFE_WEBHOOK_URL as string | undefined
 
@@ -31,6 +32,111 @@ interface UploadResult {
   notas?: NotaResumo[]
 }
 
+/**
+ * O upload responde antes de gravar ("processando"), então os números reais só
+ * existem quando o fluxo termina e registra em nfe_imports. Este bloco espera
+ * esse resumo e mostra o que de fato entrou.
+ */
+function ResumoImportacao({ lidas, desde }: { lidas: number; desde: number | null }) {
+  const { data: resumo } = useNfeImport(desde)
+  const [expirou, setExpirou] = useState(false)
+
+  useEffect(() => {
+    if (desde === null) return
+    setExpirou(false)
+    const t = setTimeout(() => setExpirou(true), RESUMO_TIMEOUT_MS)
+    return () => clearTimeout(t)
+  }, [desde])
+
+  if (resumo?.status === 'erro') {
+    return (
+      <div className="mt-6">
+        <ErrorState message={resumo.erro ?? 'O processamento falhou depois do upload.'} />
+      </div>
+    )
+  }
+
+  // Ainda gravando (ou o fluxo ainda não registra resumo — ver o fallback abaixo)
+  if (!resumo || resumo.status !== 'concluido') {
+    return (
+      <div className="mt-6 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3">
+        <div className="flex items-center gap-2">
+          {!expirou && <Loader2 className="h-5 w-5 animate-spin text-brand-600" aria-hidden />}
+          <h2 className="font-display text-base font-semibold text-gray-900">
+            {lidas} nota{lidas === 1 ? '' : 's'} lida{lidas === 1 ? '' : 's'}
+            {expirou ? ' — processando em segundo plano' : ' — gravando…'}
+          </h2>
+        </div>
+        <p className="mt-1 text-sm text-gray-600">
+          {expirou
+            ? 'O resumo não chegou a tempo. O processamento continua rodando; confira a aba Clientes daqui a pouco.'
+            : 'Contando quantas já estavam no sistema e quantas são novas. Pode fechar esta tela — o processamento continua.'}
+        </p>
+      </div>
+    )
+  }
+
+  const { total_nfes, novos_pedidos, pedidos_atualizados, novos_clientes, sem_cpf } = resumo
+  const nada = novos_pedidos === 0 && novos_clientes === 0
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className="h-5 w-5 text-emerald-600" aria-hidden />
+        <h2 className="font-display text-base font-semibold text-gray-900">Importação concluída</h2>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="card p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Notas lidas</p>
+          <p className="mt-1 font-display text-2xl font-semibold tabular-nums">{total_nfes}</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Novas</p>
+          <p className="mt-1 font-display text-2xl font-semibold tabular-nums text-emerald-700">
+            {novos_pedidos}
+          </p>
+          <p className="mt-0.5 text-xs text-gray-500">
+            {novos_clientes} cliente{novos_clientes === 1 ? '' : 's'} novo{novos_clientes === 1 ? '' : 's'}
+          </p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Já estavam</p>
+          <p className="mt-1 font-display text-2xl font-semibold tabular-nums text-gray-500">
+            {pedidos_atualizados}
+          </p>
+          <p className="mt-0.5 text-xs text-gray-500">atualizadas</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Sem CPF</p>
+          <p className="mt-1 font-display text-2xl font-semibold tabular-nums text-amber-700">{sem_cpf}</p>
+          <p className="mt-0.5 text-xs text-gray-500">não viram cliente</p>
+        </div>
+      </div>
+
+      {(resumo.nota_de || resumo.nota_ate) && (
+        <p className="mt-3 text-sm text-gray-600">
+          Notas emitidas entre <strong>{formatDate(resumo.nota_de)}</strong> e{' '}
+          <strong>{formatDate(resumo.nota_ate)}</strong>.
+        </p>
+      )}
+
+      {nada && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong>Nada de novo entrou.</strong> Todas as notas deste arquivo já estavam no sistema — foram
+          regravadas por cima, sem criar pedido nem cliente. Se você esperava novidades, provavelmente é o
+          arquivo errado.
+          {resumo.nota_de && (
+            <>
+              {' '}Para ver essas notas, abra <strong>Vendas</strong> e filtre pelo período acima.
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ImportNfe() {
   // O colaborador importa a nota, mas não vê o comprador que ela gerou.
   const canSeeCustomers = useCan('customerData')
@@ -42,11 +148,14 @@ export default function ImportNfe() {
   const [result, setResult] = useState<UploadResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [deductStock, setDeductStock] = useState(true)
+  // Instante do upload: a partir dele o resumo em nfe_imports é procurado
+  const [uploadedAt, setUploadedAt] = useState<number | null>(null)
   const queryClient = useQueryClient()
 
   const handleFile = async (file: File) => {
     setError(null)
     setResult(null)
+    setUploadedAt(null)
     const lower = file.name.toLowerCase()
     if (!lower.endsWith('.zip') && !lower.endsWith('.xml')) {
       setError(`"${file.name}" não é um .zip nem um .xml.`)
@@ -82,6 +191,7 @@ export default function ImportNfe() {
         return
       }
       setResult(body)
+      setUploadedAt(Date.now())
       // Se o fluxo passar a gravar no banco, os dados novos aparecem sem F5
       void queryClient.invalidateQueries()
     } catch {
@@ -185,20 +295,7 @@ export default function ImportNfe() {
       )}
 
       {result?.status === 'processando' && (
-        <div className="mt-6 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Loader2 className="h-5 w-5 animate-spin text-brand-600" aria-hidden />
-            <h2 className="font-display text-base font-semibold text-gray-900">
-              {result.total_nfes} nota{result.total_nfes === 1 ? '' : 's'} recebida
-              {result.total_nfes === 1 ? '' : 's'} — processando…
-            </h2>
-          </div>
-          <p className="mt-1 text-sm text-gray-600">
-            O processamento continua em segundo plano. Os clientes vão aparecer na aba{' '}
-            <strong>Clientes</strong> em alguns instantes (atualize a página conforme forem entrando). Pode
-            fechar esta tela.
-          </p>
-        </div>
+        <ResumoImportacao lidas={result.total_nfes ?? 0} desde={uploadedAt} />
       )}
 
       {result && result.status !== 'processando' && (

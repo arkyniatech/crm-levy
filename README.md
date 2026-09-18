@@ -87,6 +87,19 @@ insert into public.crm_masters (user_id)
 select id from auth.users where email = 'fulano@empresa.com';
 ```
 
+## Importar NF-e
+
+Depois do upload, a tela mostra quantas notas foram lidas, quantas eram
+**novas**, quantas **já estavam** no sistema (o fluxo regrava por cima em vez de
+duplicar) e o período de emissão do lote. Quando nada novo entra, ela diz isso
+explicitamente — é o caso comum de reenviar um arquivo já importado.
+
+Esses números não vêm na resposta do upload: o webhook responde assim que
+termina de ler os XMLs, antes de gravar. O fluxo n8n registra o resultado em
+`nfe_imports` quando termina e a tela busca de lá. Rode
+`supabase/nfe-imports-schema.sql` e aplique `docs/n8n-resumo-importacao.md`;
+sem a parte do n8n a tela volta à mensagem antiga de "processando".
+
 ## Segurança
 
 - O frontend consulta apenas: `clients`, `stores`, `customers`, `orders`,
