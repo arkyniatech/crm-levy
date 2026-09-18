@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import {
+  Building2,
   LayoutDashboard,
   Users,
   Layers,
@@ -29,6 +30,7 @@ const NAV: { to: string; label: string; icon: typeof LayoutDashboard; end?: bool
   { to: '/produtos', label: 'Produtos', icon: Package, permission: 'products' },
   { to: '/campanhas', label: 'Campanhas', icon: Megaphone, permission: 'campaigns' },
   { to: '/importar', label: 'Importar NF-e', icon: FileUp, permission: 'importNfe' },
+  { to: '/clientes-lojas', label: 'Clientes e lojas', icon: Building2, permission: 'manageClients' },
 ]
 
 const SOON: { label: string; icon: typeof Settings }[] = []

@@ -87,6 +87,24 @@ insert into public.crm_masters (user_id)
 select id from auth.users where email = 'fulano@empresa.com';
 ```
 
+## Clientes e lojas
+
+Menu **Clientes e lojas**, só para master. Dois níveis:
+
+- **cliente** — a empresa com quem se fecha contrato. É o tenant: papel e RLS
+  são escopados por ele (`clients`).
+- **loja** — cada conta de marketplace daquele cliente, Shopee/ML/TikTok
+  (`stores`).
+
+Master cria cliente e loja pela tela; admin edita as lojas do próprio cliente
+(nome e status). Rode `supabase/admin-clientes-lojas.sql` para liberar essas
+escritas — sem ele as duas tabelas seguem somente leitura.
+
+O identificador da loja (`external_shop_id`) é o que casa com a nota fiscal: o
+fluxo de NF-e faz upsert por `marketplace + external_shop_id`. Se o valor
+cadastrado não bater com o do XML, a importação cria uma loja paralela em vez
+de usar a que você cadastrou.
+
 ## Importar NF-e
 
 Depois do upload, a tela mostra quantas notas foram lidas, quantas eram

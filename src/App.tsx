@@ -16,6 +16,7 @@ import Campaigns from './pages/Campaigns'
 import Settings from './pages/Settings'
 import Segments from './pages/Segments'
 import Products from './pages/Products'
+import Clients from './pages/Clients'
 
 function ProtectedRoutes() {
   const { session, loading } = useAuth()
@@ -137,6 +138,10 @@ export default function App() {
         <Route
           path="/campanhas"
           element={<RequirePermission permission="campaigns"><Campaigns /></RequirePermission>}
+        />
+        <Route
+          path="/clientes-lojas"
+          element={<RequirePermission permission="manageClients"><Clients /></RequirePermission>}
         />
         <Route
           path="/configuracoes"

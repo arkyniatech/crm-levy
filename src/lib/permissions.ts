@@ -22,13 +22,14 @@ export type Permission =
   | 'settings'
   /** Capacidades dentro das telas */
   | 'customerData' // ver nome/telefone/CPF de cliente em qualquer lugar
-  | 'manageUsers' // criar e revogar acessos da loja
+  | 'manageUsers' // criar e revogar acessos do cliente
   | 'credits' // mexer no saldo de créditos de enriquecimento
+  | 'manageClients' // cadastrar cliente novo e as lojas dele
 
 const BY_ROLE: Record<Role, Permission[]> = {
   master: [
     'dashboard', 'customers', 'segments', 'orders', 'products', 'campaigns',
-    'importNfe', 'settings', 'customerData', 'manageUsers', 'credits',
+    'importNfe', 'settings', 'customerData', 'manageUsers', 'credits', 'manageClients',
   ],
   admin: [
     'dashboard', 'customers', 'segments', 'orders', 'products', 'campaigns',
