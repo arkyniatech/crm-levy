@@ -108,7 +108,14 @@ grant execute on function public.crm_wa_instance_quota(uuid) to authenticated;
 -- ---------------------------------------------------------------------------
 -- 5) A visão de clientes passa a trazer o limite, para o master editar na tela
 --    "Clientes e lojas". Substitui a versão de admin-clientes-lojas.sql.
+--
+--    DROP antes do CREATE de propósito: a função ganhou duas colunas, e
+--    "create or replace" não muda o tipo de retorno de uma função existente
+--    ("cannot change return type of existing function"). Nenhuma policy
+--    depende dela, então derrubar é seguro.
 -- ---------------------------------------------------------------------------
+drop function if exists public.crm_clients_overview();
+
 create or replace function public.crm_clients_overview()
 returns table (
   id uuid,
