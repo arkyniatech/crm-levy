@@ -1,0 +1,34 @@
+# Publica a landing (landing/) na branch "hostinger-lp", que a Hostinger serve
+# na RAIZ do domínio (public_html). O app continua indo para a branch
+# "hostinger", servida pelo subdomínio app.contatta.pro.
+#
+# Separado do outro workflow de propósito: a landing é estática e não precisa
+# de build nem das variáveis VITE_*, então mexer nela não arrisca o deploy do
+# app — e vice-versa.
+name: Landing para Hostinger
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'landing/**'
+      - '.github/workflows/deploy-landing.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publicar landing/ na branch hostinger-lp
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: hostinger-lp
+          publish_dir: ./landing
+          force_orphan: true
+          commit_message: 'Landing de ${{ github.sha }}'

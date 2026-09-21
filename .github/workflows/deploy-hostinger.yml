@@ -1,11 +1,20 @@
 # Builda o app a cada push na main e publica o resultado (dist/) na branch
 # "hostinger". A Hostinger deve ser configurada para fazer deploy DESSA branch
 # (hPanel → Git), porque a hospedagem estática dela não roda o build do Vite.
+#
+# Destino: a pasta do subdomínio app.contatta.pro. A raiz do domínio serve a
+# landing, publicada em "hostinger-lp" pelo workflow deploy-landing.yml.
 name: Build para Hostinger
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'landing/**'
+      - 'docs/**'
+      - 'n8n/**'
+      - 'supabase/**'
+      - '**.md'
   workflow_dispatch:
 
 permissions:
