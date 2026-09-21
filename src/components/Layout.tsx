@@ -22,6 +22,7 @@ import { useCompany } from '../context/CompanyContext'
 import { useUserRole } from '../hooks/settings'
 import { can, ROLE_LABEL, type Permission } from '../lib/permissions'
 import { formatCnpj } from '../lib/format'
+import Logo from './Logo'
 
 const NAV: { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; permission: Permission }[] = [
   { to: '/', label: 'Visão Geral', icon: LayoutDashboard, end: true, permission: 'dashboard' },
@@ -53,14 +54,7 @@ function SidebarContent({
   return (
     <div className="flex h-full flex-col">
       <div className={`flex items-center pb-6 pt-6 ${collapsed ? 'flex-col gap-3 px-2' : 'gap-2.5 px-5'}`}>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600">
-          <svg viewBox="0 0 32 32" className="h-5 w-5" aria-hidden="true">
-            <path d="M16 7a9 9 0 0 0-7.7 13.6L7 25l4.6-1.2A9 9 0 1 0 16 7z" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinejoin="round" />
-            <circle cx="11.5" cy="16" r="1.5" fill="#fff" />
-            <circle cx="16" cy="16" r="1.5" fill="#fff" />
-            <circle cx="20.5" cy="16" r="1.5" fill="#c7d2fe" />
-          </svg>
-        </div>
+        <Logo className="h-8 w-8 shrink-0" />
         {!collapsed && (
           <div className="min-w-0 flex-1">
             <p className="font-display text-sm font-semibold tracking-wide text-white">Contatta</p>
