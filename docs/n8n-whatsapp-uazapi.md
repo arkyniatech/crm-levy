@@ -6,6 +6,27 @@ os tokens. Este documento é o contrato desse webhook.
 
 Antes: rode `supabase/wa-instances-schema.sql`.
 
+## Atalho: importar o fluxo pronto
+
+O fluxo inteiro está em **`n8n/unificca-wa-instance.json`** — 32 nós, as cinco
+ações, validação de papel e checagem de posse já ligados. Em vez de montar à
+mão:
+
+1. No n8n, menu **Workflows → Import from File** (ou copie o conteúdo do
+   arquivo e cole no canvas com Ctrl+V).
+2. Abra os dois nós marcados com nota — **`uazapi criar`** e
+   **`uazapi deletar`** — e selecione neles a credencial *Header Auth* com o
+   `admintoken`. É a única coisa que o import não traz, porque credencial não
+   viaja em JSON (ainda bem).
+3. Confira que os nós do Supabase pegaram a credencial `crm-levy`. Se o id for
+   diferente na sua instância, selecione na mão.
+4. Salve e **ative** o fluxo.
+5. Copie a URL de produção do webhook e ponha em `VITE_N8N_WA_INSTANCE_URL`
+   (no `.env` local e no secret do GitHub).
+
+O resto deste documento explica o que cada parte faz — leia se precisar
+ajustar, principalmente a seção do QR Code.
+
 ## Por que tudo passa por aqui
 
 A uazapi usa dois segredos. O **admintoken** cria e apaga instâncias — é a
