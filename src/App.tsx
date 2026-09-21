@@ -17,6 +17,7 @@ import Settings from './pages/Settings'
 import Segments from './pages/Segments'
 import Products from './pages/Products'
 import Clients from './pages/Clients'
+import WhatsApp from './pages/WhatsApp'
 
 function ProtectedRoutes() {
   const { session, loading } = useAuth()
@@ -138,6 +139,10 @@ export default function App() {
         <Route
           path="/campanhas"
           element={<RequirePermission permission="campaigns"><Campaigns /></RequirePermission>}
+        />
+        <Route
+          path="/whatsapp"
+          element={<RequirePermission permission="waInstances"><WhatsApp /></RequirePermission>}
         />
         <Route
           path="/clientes-lojas"

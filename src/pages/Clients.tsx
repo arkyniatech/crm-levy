@@ -107,10 +107,14 @@ function DadosDoCliente({ c }: { c: ClientOverview }) {
   const salvar = useUpdateClient()
   const [name, setName] = useState(c.name ?? '')
   const [document, setDocument] = useState(c.document ?? '')
+  const [waLimite, setWaLimite] = useState(String(c.wa_instance_limit ?? 1))
   const [msg, setMsg] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
 
-  const mudou = name !== (c.name ?? '') || somenteDigitos(document) !== (c.document ?? '')
+  const mudou =
+    name !== (c.name ?? '') ||
+    somenteDigitos(document) !== (c.document ?? '') ||
+    Number(waLimite) !== c.wa_instance_limit
 
   const enviar = async (e: FormEvent) => {
     e.preventDefault()
@@ -125,8 +129,24 @@ function DadosDoCliente({ c }: { c: ClientOverview }) {
       setErro('O CNPJ precisa ter 14 dígitos — ou deixe em branco.')
       return
     }
+    const limite = Number(waLimite)
+    if (!Number.isInteger(limite) || limite < 0 || limite > 20) {
+      setErro('O limite de instâncias precisa ser um número de 0 a 20.')
+      return
+    }
+    if (limite < c.wa_instances) {
+      setErro(
+        `Este cliente já tem ${c.wa_instances} instância(s) conectada(s). Apague alguma antes de baixar o limite.`,
+      )
+      return
+    }
     try {
-      await salvar.mutateAsync({ id: c.id, name: name.trim(), document: cnpj || null })
+      await salvar.mutateAsync({
+        id: c.id,
+        name: name.trim(),
+        document: cnpj || null,
+        waInstanceLimit: limite,
+      })
       setMsg('Salvo.')
     } catch (e) {
       setErro((e as Error).message)
@@ -147,6 +167,16 @@ function DadosDoCliente({ c }: { c: ClientOverview }) {
           onChange={(e) => setDocument(e.target.value)}
           placeholder="só números"
           inputMode="numeric"
+        />
+      </label>
+      <label className="block">
+        <span className="text-xs font-medium text-gray-600">Instâncias de WhatsApp</span>
+        <input
+          className="input mt-1 w-24"
+          value={waLimite}
+          onChange={(e) => setWaLimite(e.target.value)}
+          inputMode="numeric"
+          title="Quantos números este cliente pode conectar"
         />
       </label>
       <button type="submit" className="btn-secondary" disabled={!mudou || salvar.isPending}>

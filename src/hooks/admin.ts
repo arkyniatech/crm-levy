@@ -14,6 +14,10 @@ export interface ClientOverview {
   acessos: number
   /** tamanho da base de consumidores */
   clientes_base: number
+  /** quantas instâncias de WhatsApp este cliente pode ter (master define) */
+  wa_instance_limit: number
+  /** quantas já existem */
+  wa_instances: number
 }
 
 export function useClientsOverview() {
@@ -66,10 +70,19 @@ export function useCreateClient() {
 export function useUpdateClient() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (input: { id: string; name: string; document: string | null }) => {
+    mutationFn: async (input: {
+      id: string
+      name: string
+      document: string | null
+      waInstanceLimit: number
+    }) => {
       const { error } = await supabase
         .from('clients')
-        .update({ name: input.name, document: input.document })
+        .update({
+          name: input.name,
+          document: input.document,
+          wa_instance_limit: input.waInstanceLimit,
+        })
         .eq('id', input.id)
       if (error) throw new Error(error.message)
     },

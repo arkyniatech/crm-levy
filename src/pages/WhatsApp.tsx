@@ -1,0 +1,283 @@
+import { useEffect, useState, type FormEvent } from 'react'
+import { Loader2, Plus, QrCode, Smartphone, Trash2, Unplug } from 'lucide-react'
+import {
+  STATUS_HINT,
+  STATUS_LABEL,
+  STATUS_TONE,
+  useWaActions,
+  useWaInstances,
+  useWaQuota,
+  type WaInstance,
+} from '../hooks/waInstances'
+import { formatPhone } from '../lib/format'
+import { EmptyState, ErrorState, PageHeader, StatusBadge } from '../components/ui'
+
+/** O QR da uazapi vem em base64 ou já como data URI; a tela aceita os dois. */
+function qrSrc(qr: string): string {
+  return qr.startsWith('data:') ? qr : `data:image/png;base64,${qr}`
+}
+
+function CartaoInstancia({ i }: { i: WaInstance }) {
+  const acoes = useWaActions()
+  const [qr, setQr] = useState<string | null>(null)
+  const [paircode, setPaircode] = useState<string | null>(null)
+  const [ocupado, setOcupado] = useState<string | null>(null)
+  const [erro, setErro] = useState<string | null>(null)
+
+  // O QR expira em segundos. Enquanto estiver conectando, pede um novo a cada
+  // 30s — sem isso o usuário lê um código morto e nada acontece.
+  useEffect(() => {
+    if (i.status !== 'connecting' || !qr) return
+    const t = setInterval(() => void renovar(), 30_000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [i.status, qr])
+
+  // Conectou: o QR não serve mais para nada
+  useEffect(() => {
+    if (i.status === 'connected') {
+      setQr(null)
+      setPaircode(null)
+    }
+  }, [i.status])
+
+  const renovar = async () => {
+    const r = await acoes.conectar(i.id)
+    if (r.ok) {
+      setQr(r.qrcode ?? null)
+      setPaircode(r.paircode ?? null)
+    }
+  }
+
+  const rodar = async (nome: string, fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    setOcupado(nome)
+    setErro(null)
+    const r = await fn()
+    setOcupado(null)
+    if (!r.ok) setErro(r.error ?? 'Falha na operação.')
+    return r
+  }
+
+  const conectar = async () => {
+    const r = await rodar('conectar', () => acoes.conectar(i.id))
+    if (r.ok) {
+      const resp = r as { qrcode?: string; paircode?: string }
+      setQr(resp.qrcode ?? null)
+      setPaircode(resp.paircode ?? null)
+    }
+  }
+
+  const desconectar = async () => {
+    if (!window.confirm(`Desconectar ${i.label ?? i.instance_name}? As campanhas param até reconectar.`)) return
+    await rodar('desconectar', () => acoes.desconectar(i.id))
+  }
+
+  const deletar = async () => {
+    if (
+      !window.confirm(
+        `Apagar a instância ${i.label ?? i.instance_name}? A sessão é destruída e reconectar exige ler o QR de novo.`,
+      )
+    )
+      return
+    await rodar('deletar', () => acoes.deletar(i.id))
+  }
+
+  const conectado = i.status === 'connected'
+
+  return (
+    <div className="card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Smartphone className="h-4 w-4 shrink-0 text-brand-600" aria-hidden />
+            <h3 className="truncate font-display text-sm font-semibold text-gray-900">
+              {i.label ?? i.instance_name}
+            </h3>
+            <StatusBadge status={STATUS_LABEL[i.status]} tone={STATUS_TONE[i.status]} />
+          </div>
+          <p className="mt-1 text-sm text-gray-600">{STATUS_HINT[i.status]}</p>
+          {conectado && i.phone && (
+            <p className="mt-1 text-sm font-medium tabular-nums text-gray-800">
+              {formatPhone(i.phone)}
+              {i.profile_name ? ` · ${i.profile_name}` : ''}
+            </p>
+          )}
+          {i.last_error && i.status !== 'connected' && (
+            <p className="mt-1 text-xs text-red-700">Último erro: {i.last_error}</p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {!conectado && (
+            <button type="button" className="btn-primary" onClick={() => void conectar()} disabled={ocupado !== null}>
+              {ocupado === 'conectar' ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <QrCode className="h-4 w-4" aria-hidden />
+              )}
+              {i.status === 'connecting' ? 'Gerar novo QR' : 'Conectar'}
+            </button>
+          )}
+          {conectado && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void desconectar()}
+              disabled={ocupado !== null}
+            >
+              <Unplug className="h-4 w-4" aria-hidden />
+              Desconectar
+            </button>
+          )}
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-md border border-gray-300 p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
+            onClick={() => void deletar()}
+            disabled={ocupado !== null}
+            title="Apagar instância"
+            aria-label={`Apagar instância ${i.label ?? i.instance_name}`}
+          >
+            <Trash2 className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
+      </div>
+
+      {erro && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
+
+      {qr && !conectado && (
+        <div className="mt-4 flex flex-wrap items-center gap-5 rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <img
+            src={qrSrc(qr)}
+            alt="QR Code para conectar o WhatsApp"
+            className="h-52 w-52 rounded-md border border-gray-300 bg-white p-2"
+          />
+          <ol className="max-w-sm list-decimal space-y-1 pl-4 text-sm text-gray-700">
+            <li>Abra o WhatsApp no celular do número que vai disparar.</li>
+            <li>
+              Toque em <strong>Configurações → Aparelhos conectados</strong>.
+            </li>
+            <li>
+              Toque em <strong>Conectar um aparelho</strong> e aponte para este código.
+            </li>
+            <li className="text-gray-500">
+              O código se renova sozinho a cada 30 segundos enquanto esta tela estiver aberta.
+            </li>
+          </ol>
+        </div>
+      )}
+
+      {paircode && !conectado && (
+        <p className="mt-3 text-sm text-gray-700">
+          Código de pareamento: <strong className="tabular-nums tracking-widest">{paircode}</strong>
+        </p>
+      )}
+    </div>
+  )
+}
+
+function NovaInstancia({ podeCriar, limite }: { podeCriar: boolean; limite: number }) {
+  const acoes = useWaActions()
+  const [aberto, setAberto] = useState(false)
+  const [label, setLabel] = useState('')
+  const [erro, setErro] = useState<string | null>(null)
+  const [criando, setCriando] = useState(false)
+
+  const criar = async (e: FormEvent) => {
+    e.preventDefault()
+    setErro(null)
+    if (!label.trim()) {
+      setErro('Dê um nome para identificar este número.')
+      return
+    }
+    setCriando(true)
+    const r = await acoes.criar(label.trim())
+    setCriando(false)
+    if (!r.ok) {
+      setErro(r.error ?? 'Falha ao criar a instância.')
+      return
+    }
+    setLabel('')
+    setAberto(false)
+  }
+
+  if (!podeCriar) {
+    return (
+      <p className="text-sm text-gray-500">
+        Limite de {limite} {limite === 1 ? 'instância' : 'instâncias'} atingido. Fale com o master para
+        aumentar.
+      </p>
+    )
+  }
+
+  if (!aberto) {
+    return (
+      <button type="button" className="btn-primary" onClick={() => setAberto(true)}>
+        <Plus className="h-4 w-4" aria-hidden />
+        Conectar um número
+      </button>
+    )
+  }
+
+  return (
+    <form onSubmit={criar} className="flex flex-wrap items-end gap-2">
+      <label className="block">
+        <span className="text-sm font-medium text-gray-700">Nome do número</span>
+        <input
+          className="input mt-1 w-56"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Ex.: Vendas"
+          autoFocus
+        />
+      </label>
+      <button type="submit" className="btn-primary" disabled={criando}>
+        {criando ? 'Criando…' : 'Criar'}
+      </button>
+      <button type="button" className="text-sm text-gray-500 hover:text-gray-700" onClick={() => setAberto(false)}>
+        Cancelar
+      </button>
+      {erro && <span className="text-sm text-red-700">{erro}</span>}
+    </form>
+  )
+}
+
+export default function WhatsApp() {
+  const { data: instancias, isLoading, error } = useWaInstances()
+  const { data: quota } = useWaQuota()
+
+  return (
+    <div>
+      <PageHeader
+        title="WhatsApp"
+        subtitle="Conecte o número que vai disparar as campanhas, lendo um QR Code"
+      >
+        <NovaInstancia podeCriar={quota?.pode_criar ?? false} limite={quota?.limite ?? 1} />
+      </PageHeader>
+
+      {error && <ErrorState message={(error as Error).message} />}
+
+      {quota && (
+        <p className="mb-3 text-sm text-gray-500">
+          {quota.usadas} de {quota.limite} {quota.limite === 1 ? 'instância' : 'instâncias'} em uso.
+        </p>
+      )}
+
+      {isLoading ? (
+        <div className="card h-40 animate-pulse" />
+      ) : !instancias || instancias.length === 0 ? (
+        <div className="card">
+          <EmptyState
+            title="Nenhum número conectado"
+            hint="Crie uma instância e leia o QR Code com o WhatsApp que vai enviar as campanhas."
+          />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {instancias.map((i) => (
+            <CartaoInstancia key={i.id} i={i} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}

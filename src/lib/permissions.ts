@@ -25,15 +25,17 @@ export type Permission =
   | 'manageUsers' // criar e revogar acessos do cliente
   | 'credits' // mexer no saldo de créditos de enriquecimento
   | 'manageClients' // cadastrar cliente novo e as lojas dele
+  | 'waInstances' // conectar e desconectar o WhatsApp do cliente
 
 const BY_ROLE: Record<Role, Permission[]> = {
   master: [
     'dashboard', 'customers', 'segments', 'orders', 'products', 'campaigns',
     'importNfe', 'settings', 'customerData', 'manageUsers', 'credits', 'manageClients',
+    'waInstances',
   ],
   admin: [
     'dashboard', 'customers', 'segments', 'orders', 'products', 'campaigns',
-    'importNfe', 'settings', 'customerData', 'manageUsers',
+    'importNfe', 'settings', 'customerData', 'manageUsers', 'waInstances',
   ],
   collaborator: ['campaigns', 'importNfe'],
 }

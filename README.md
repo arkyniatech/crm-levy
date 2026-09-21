@@ -87,6 +87,26 @@ insert into public.crm_masters (user_id)
 select id from auth.users where email = 'fulano@empresa.com';
 ```
 
+## WhatsApp (uazapi)
+
+Menu **WhatsApp**, para admin e master. O cliente conecta o próprio número
+lendo um QR Code: criar instância, conectar, desconectar e apagar. A tela trata
+os seis estados da uazapi (`disconnected`, `connecting`, `connected`,
+`hibernated`, `registering`, `registration_conflict`) e renova o QR a cada 30s
+enquanto ninguém leu.
+
+Quantas instâncias cada cliente pode ter é definido pelo master em **Clientes e
+lojas** (`clients.wa_instance_limit`, padrão 1).
+
+**Os tokens da uazapi nunca chegam ao navegador.** O admintoken vale para a
+conta inteira e o token de instância controla aquele WhatsApp; o build é
+estático e público. Então o CRM só lê `wa_instances` (status, número) e pede
+ações a um webhook n8n. Os tokens vivem em `wa_instance_tokens`, que não tem
+policy nenhuma — invisível para anon e authenticated, igual a `store_tokens`.
+
+Rode `supabase/wa-instances-schema.sql` e siga `docs/n8n-whatsapp-uazapi.md`.
+Precisa da variável `VITE_N8N_WA_INSTANCE_URL`.
+
 ## Clientes e lojas
 
 Menu **Clientes e lojas**, só para master. Dois níveis:
