@@ -191,3 +191,39 @@ Depois suba um lote inédito e confirme que os números invertem.
 `Registrar importação` não gravou. Abra a execução no n8n, clique nesse nó e
 leia o output: se vier `code`/`message`, a resposta do Supabase diz o motivo
 (tabela não criada ainda é o caso mais provável — volte e rode o SQL).
+
+---
+
+# Anexo — corrigir a baixa dupla de estoque
+
+Roda junto com `supabase/stock-nfe-idempotente.sql`. São coisas
+complementares: o SQL faz a função pular nota já baixada, e este ajuste faz a
+identificação da nota ser confiável.
+
+No nó **`Baixar estoque`**, o `p_ref` hoje é:
+
+```js
+p_ref: ($json.numero_nf || $json.chave_acesso || '')
+```
+
+Inverta a ordem:
+
+```js
+p_ref: ($json.chave_acesso || $json.numero_nf || '')
+```
+
+**Por quê:** o número da NF só é único por emitente e série. Vocês têm cinco
+emitentes (as `Shopee · emit:...`), então duas notas diferentes podem ser a
+nº 1234 — e a deduplicação recusaria uma baixa legítima achando que já tinha
+sido feita. A chave de acesso tem 44 dígitos e é única no país.
+
+**Se já existirem movimentos gravados com o número da nota como `ref`**, eles
+não vão casar com os novos, que passarão a usar a chave. Na prática: uma nota
+já baixada antes da mudança pode ser baixada uma segunda vez, uma única vez.
+Confira antes com:
+
+```sql
+select count(*) from public.stock_movements where reason = 'nfe';
+```
+
+Se der zero, não há nada a reconciliar e pode inverter sem preocupação.
