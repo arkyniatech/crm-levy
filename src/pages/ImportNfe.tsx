@@ -3,10 +3,17 @@ import { useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, FileArchive, FileCode2, Loader2, UploadCloud, XCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatCurrency, formatDate, formatDateTime, maskCpf } from '../lib/format'
-import { ErrorState, PageHeader } from '../components/ui'
+import { EmptyState, ErrorState, LoadingRows, PageHeader } from '../components/ui'
 import { useCan } from '../hooks/settings'
 import { useCompany } from '../context/CompanyContext'
-import { RESUMO_TIMEOUT_MS, useNfeImport } from '../hooks/nfeImports'
+import {
+  lerImportacaoEmCurso,
+  limparImportacaoEmCurso,
+  RESUMO_TIMEOUT_MS,
+  salvarImportacaoEmCurso,
+  useNfeImport,
+  useNfeImportLog,
+} from '../hooks/nfeImports'
 
 const WEBHOOK_URL = import.meta.env.VITE_N8N_NFE_WEBHOOK_URL as string | undefined
 
@@ -39,12 +46,20 @@ interface UploadResult {
  */
 function ResumoImportacao({ lidas, desde }: { lidas: number; desde: number | null }) {
   const { data: resumo } = useNfeImport(desde)
-  const [expirou, setExpirou] = useState(false)
+  // A janela conta a partir do upload, não da montagem: ao voltar de outra aba
+  // com um upload antigo restaurado, não faz sentido recomeçar os 3 minutos.
+  const restante = desde === null ? 0 : RESUMO_TIMEOUT_MS - (Date.now() - desde)
+  const [expirou, setExpirou] = useState(restante <= 0)
 
   useEffect(() => {
     if (desde === null) return
+    const falta = RESUMO_TIMEOUT_MS - (Date.now() - desde)
+    if (falta <= 0) {
+      setExpirou(true)
+      return
+    }
     setExpirou(false)
-    const t = setTimeout(() => setExpirou(true), RESUMO_TIMEOUT_MS)
+    const t = setTimeout(() => setExpirou(true), falta)
     return () => clearTimeout(t)
   }, [desde])
 
@@ -137,6 +152,63 @@ function ResumoImportacao({ lidas, desde }: { lidas: number; desde: number | nul
   )
 }
 
+/** Aba Histórico: o que cada importação anterior de fato gravou. */
+function HistoricoImportacoes() {
+  const { data: linhas, isLoading, error } = useNfeImportLog()
+
+  if (error) return <ErrorState message={(error as Error).message} />
+  if (isLoading) return <LoadingRows cols={6} />
+  if (!linhas || linhas.length === 0) {
+    return (
+      <div className="card">
+        <EmptyState
+          title="Nenhuma importação registrada"
+          hint="O histórico começa a partir da primeira importação depois que o fluxo passou a registrar o resultado."
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="th">Quando</th>
+              <th className="th">Quem</th>
+              <th className="th text-right">Lidas</th>
+              <th className="th text-right">Novas</th>
+              <th className="th text-right">Já estavam</th>
+              <th className="th text-right">Sem CPF</th>
+              <th className="th">Período das notas</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {linhas.map((l) => (
+              <tr key={l.id} className="hover:bg-gray-50">
+                <td className="td whitespace-nowrap tabular-nums">{formatDateTime(l.created_at)}</td>
+                <td className="td max-w-[14rem] truncate" title={l.email ?? ''}>
+                  {l.email ?? '—'}
+                </td>
+                <td className="td text-right tabular-nums">{l.total_nfes}</td>
+                <td className="td text-right font-medium tabular-nums text-emerald-700">
+                  {l.novos_pedidos}
+                </td>
+                <td className="td text-right tabular-nums text-gray-500">{l.pedidos_atualizados}</td>
+                <td className="td text-right tabular-nums text-amber-700">{l.sem_cpf}</td>
+                <td className="td whitespace-nowrap tabular-nums text-gray-600">
+                  {l.nota_de ? `${formatDate(l.nota_de)} – ${formatDate(l.nota_ate)}` : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function ImportNfe() {
   // O colaborador importa a nota, mas não vê o comprador que ela gerou.
   const canSeeCustomers = useCan('customerData')
@@ -150,12 +222,24 @@ export default function ImportNfe() {
   const [deductStock, setDeductStock] = useState(true)
   // Instante do upload: a partir dele o resumo em nfe_imports é procurado
   const [uploadedAt, setUploadedAt] = useState<number | null>(null)
+  const [aba, setAba] = useState<'importar' | 'historico'>('importar')
+
+  // Trocar de tela desmonta este componente e levava o status junto. O que
+  // estiver em curso fica guardado no navegador e volta ao reabrir a tela.
+  useEffect(() => {
+    const emCurso = lerImportacaoEmCurso(activeClient?.id)
+    if (!emCurso) return
+    setResult({ ok: true, status: 'processando', total_nfes: emCurso.lidas })
+    setUploadedAt(emCurso.startedAt)
+    setFileName(emCurso.fileName)
+  }, [activeClient?.id])
   const queryClient = useQueryClient()
 
   const handleFile = async (file: File) => {
     setError(null)
     setResult(null)
     setUploadedAt(null)
+    limparImportacaoEmCurso()
     const lower = file.name.toLowerCase()
     if (!lower.endsWith('.zip') && !lower.endsWith('.xml')) {
       setError(`"${file.name}" não é um .zip nem um .xml.`)
@@ -191,7 +275,16 @@ export default function ImportNfe() {
         return
       }
       setResult(body)
-      setUploadedAt(Date.now())
+      const startedAt = Date.now()
+      setUploadedAt(startedAt)
+      if (activeClient) {
+        salvarImportacaoEmCurso({
+          clientId: activeClient.id,
+          startedAt,
+          lidas: body.total_nfes ?? 0,
+          fileName: file.name,
+        })
+      }
       // Se o fluxo passar a gravar no banco, os dados novos aparecem sem F5
       void queryClient.invalidateQueries()
     } catch {
@@ -215,6 +308,31 @@ export default function ImportNfe() {
         subtitle="Envie um ZIP de notas (pode ter pastas e ZIPs internos) ou um XML avulso"
       />
 
+      <div className="mb-4 flex gap-1 border-b border-gray-200">
+        {([
+          { key: 'importar', label: 'Importar' },
+          { key: 'historico', label: 'Histórico' },
+        ] as const).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setAba(t.key)}
+            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+              aba === t.key
+                ? 'border-brand-600 text-brand-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {aba === 'historico' && <HistoricoImportacoes />}
+
+      {/* Escondido por CSS, não desmontado: desmontar zeraria o estado de um
+          upload em andamento — foi assim que o status sumia ao trocar de aba. */}
+      <div className={aba === 'importar' ? '' : 'hidden'}>
       <label className="mb-4 flex items-start gap-2.5 rounded-lg border border-gray-200 bg-white px-4 py-3">
         <input
           type="checkbox"
@@ -376,6 +494,7 @@ export default function ImportNfe() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

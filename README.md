@@ -112,6 +112,13 @@ Depois do upload, a tela mostra quantas notas foram lidas, quantas eram
 duplicar) e o período de emissão do lote. Quando nada novo entra, ela diz isso
 explicitamente — é o caso comum de reenviar um arquivo já importado.
 
+A aba **Histórico** guarda as importações anteriores: quando, quem mandou,
+lidas, novas, já estavam, sem CPF e o período das notas. Rode
+`supabase/nfe-imports-log.sql` para habilitá-la.
+
+O status de uma importação em andamento sobrevive à troca de tela — fica
+guardado no navegador por 1 hora e é reexibido ao voltar.
+
 Esses números não vêm na resposta do upload: o webhook responde assim que
 termina de ler os XMLs, antes de gravar. O fluxo n8n registra o resultado em
 `nfe_imports` quando termina e a tela busca de lá. Rode

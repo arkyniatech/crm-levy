@@ -32,13 +32,17 @@ export const RESUMO_TIMEOUT_MS = 3 * 60 * 1000
  */
 export function useNfeImport(desde: number | null) {
   const { activeClient } = useCompany()
-  const expirou = desde !== null && Date.now() - desde > RESUMO_TIMEOUT_MS
 
   return useQuery({
     queryKey: ['nfe-import', activeClient?.id, desde],
-    enabled: Boolean(activeClient) && desde !== null && !expirou,
-    // Enquanto não chegar resumo concluído, pergunta de novo
-    refetchInterval: (query) => (query.state.data?.status === 'concluido' ? false : 3_000),
+    // Fica habilitada mesmo depois da janela de espera: ao voltar de outra aba
+    // a tela precisa reencontrar o resumo que já foi gravado.
+    enabled: Boolean(activeClient) && desde !== null,
+    refetchInterval: (query) => {
+      if (query.state.data?.status === 'concluido') return false
+      if (desde === null || Date.now() - desde > RESUMO_TIMEOUT_MS) return false
+      return 3_000
+    },
     queryFn: async (): Promise<NfeImport | null> => {
       const corte = new Date(desde! - 2 * 60 * 1000).toISOString()
       const { data, error } = await supabase
@@ -53,4 +57,71 @@ export function useNfeImport(desde: number | null) {
       return (data as NfeImport) ?? null
     },
   })
+}
+
+export interface NfeImportLog extends NfeImport {
+  email: string | null
+}
+
+/** Importações anteriores do cliente ativo, para a aba Histórico. */
+export function useNfeImportLog(limit = 50) {
+  const { activeClient } = useCompany()
+  return useQuery({
+    queryKey: ['nfe-import-log', activeClient?.id, limit],
+    enabled: Boolean(activeClient),
+    queryFn: async (): Promise<NfeImportLog[]> => {
+      const { data, error } = await supabase.rpc('crm_nfe_imports', {
+        p_client_id: activeClient!.id,
+        p_limit: limit,
+      })
+      if (error) throw new Error(error.message)
+      return (data ?? []) as NfeImportLog[]
+    },
+  })
+}
+
+const PROGRESSO_KEY = 'unificca.nfeImportEmCurso'
+/** Quanto tempo o resumo continua sendo reexibido ao voltar para a tela. */
+const PROGRESSO_TTL_MS = 60 * 60 * 1000
+
+export interface ImportacaoEmCurso {
+  clientId: string
+  startedAt: number
+  lidas: number
+  fileName: string | null
+}
+
+/**
+ * O upload roda em segundo plano e a tela pode ser trocada no meio. Guardar o
+ * que está em curso faz o status sobreviver a essa troca — sem isso o estado
+ * morre junto com o componente e parece que a importação sumiu.
+ */
+export function lerImportacaoEmCurso(clientId: string | undefined): ImportacaoEmCurso | null {
+  if (!clientId) return null
+  try {
+    const raw = localStorage.getItem(PROGRESSO_KEY)
+    if (!raw) return null
+    const p = JSON.parse(raw) as ImportacaoEmCurso
+    if (p.clientId !== clientId) return null
+    if (Date.now() - p.startedAt > PROGRESSO_TTL_MS) return null
+    return p
+  } catch {
+    return null
+  }
+}
+
+export function salvarImportacaoEmCurso(p: ImportacaoEmCurso): void {
+  try {
+    localStorage.setItem(PROGRESSO_KEY, JSON.stringify(p))
+  } catch {
+    // navegador sem storage: perde só a persistência entre telas
+  }
+}
+
+export function limparImportacaoEmCurso(): void {
+  try {
+    localStorage.removeItem(PROGRESSO_KEY)
+  } catch {
+    // nada a fazer
+  }
 }
