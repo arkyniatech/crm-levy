@@ -104,7 +104,8 @@ function CartaoInstancia({ i }: { i: WaInstance }) {
   const deletar = async () => {
     if (
       !window.confirm(
-        `Apagar a instância ${i.label ?? i.instance_name}? A sessão é destruída e reconectar exige ler o QR de novo.`,
+        `Apagar a instância ${i.label ?? i.instance_name}?\n\n` +
+          'Ela é desconectada e removida também na uazapi. Reconectar exige criar outra e ler o QR de novo.',
       )
     )
       return
@@ -112,6 +113,10 @@ function CartaoInstancia({ i }: { i: WaInstance }) {
   }
 
   const conectado = i.status === 'connected'
+  // Desconectar vale para qualquer sessão viva, não só a conectada: uma
+  // instância em "aguardando QR" ou hibernada também precisa ser encerrada
+  // antes de apagar.
+  const temSessao = i.status !== 'disconnected' && i.status !== 'creating'
 
   return (
     <div className="card p-5">
@@ -147,14 +152,18 @@ function CartaoInstancia({ i }: { i: WaInstance }) {
               {i.status === 'connecting' ? 'Gerar novo QR' : 'Conectar'}
             </button>
           )}
-          {conectado && (
+          {temSessao && (
             <button
               type="button"
               className="btn-secondary"
               onClick={() => void desconectar()}
               disabled={ocupado !== null}
             >
-              <Unplug className="h-4 w-4" aria-hidden />
+              {ocupado === 'desconectar' ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Unplug className="h-4 w-4" aria-hidden />
+              )}
               Desconectar
             </button>
           )}

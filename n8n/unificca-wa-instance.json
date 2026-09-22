@@ -294,7 +294,13 @@
         120
       ],
       "onError": "continueRegularOutput",
-      "notes": "Selecione aqui a credencial Header Auth com o admintoken da uazapi."
+      "notes": "Usa o admintoken da uazapi (credencial arkynia-uazapi).",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "DJIqxZLTo4wPJA82",
+          "name": "arkynia-uazapi"
+        }
+      }
     },
     {
       "parameters": {
@@ -842,7 +848,13 @@
         780
       ],
       "onError": "continueRegularOutput",
-      "notes": "Selecione aqui a credencial Header Auth com o admintoken da uazapi."
+      "notes": "Usa o admintoken da uazapi (credencial arkynia-uazapi).",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "DJIqxZLTo4wPJA82",
+          "name": "arkynia-uazapi"
+        }
+      }
     },
     {
       "parameters": {
@@ -866,7 +878,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1940,
+        2160,
         780
       ],
       "onError": "continueRegularOutput",
@@ -888,8 +900,87 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        2160,
+        2380,
         780
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://arkyniatech.uazapi.com/instance/disconnect",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "={{ (function(){ const e = $('Carregar instancia').first().json.wa_instance_tokens; const t = Array.isArray(e) ? e[0] : e; return (t && t.token) || ''; })() }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}",
+        "options": {}
+      },
+      "id": "wa-desconectar-antes",
+      "name": "uazapi desconectar antes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1500,
+        780
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "A uazapi espera a sessão encerrada antes de apagar a instância. Se já estiver desconectada, este passo não faz mal."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wa-conferir-delete",
+      "name": "Apagou na uazapi?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1940,
+        780
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: \"A uazapi não apagou a instância: \" + JSON.stringify($('uazapi deletar').first().json) + \". A instância continua no CRM de propósito, para os dois lados não ficarem divergentes.\" }) }}",
+        "options": {
+          "responseCode": 502
+        }
+      },
+      "id": "wa-delete-falhou",
+      "name": "Responder falha ao apagar",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2160,
+        960
       ]
     }
   ],
@@ -1097,7 +1188,7 @@
         ],
         [
           {
-            "node": "uazapi deletar",
+            "node": "uazapi desconectar antes",
             "type": "main",
             "index": 0
           }
@@ -1181,7 +1272,7 @@
       "main": [
         [
           {
-            "node": "Apagar do banco",
+            "node": "Apagou na uazapi?",
             "type": "main",
             "index": 0
           }
@@ -1193,6 +1284,35 @@
         [
           {
             "node": "Responder apagada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "uazapi desconectar antes": {
+      "main": [
+        [
+          {
+            "node": "uazapi deletar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apagou na uazapi?": {
+      "main": [
+        [
+          {
+            "node": "Apagar do banco",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder falha ao apagar",
             "type": "main",
             "index": 0
           }

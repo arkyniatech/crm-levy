@@ -14,10 +14,10 @@ mão:
 
 1. No n8n, menu **Workflows → Import from File** (ou copie o conteúdo do
    arquivo e cole no canvas com Ctrl+V).
-2. Abra os dois nós marcados com nota — **`uazapi criar`** e
-   **`uazapi deletar`** — e selecione neles a credencial *Header Auth* com o
-   `admintoken`. É a única coisa que o import não traz, porque credencial não
-   viaja em JSON (ainda bem).
+2. Os dois nós que usam o `admintoken` — **`uazapi criar`** e
+   **`uazapi deletar`** — já vêm apontando para a credencial `arkynia-uazapi`.
+   Confirme que ficaram preenchidos; se o id for outro na sua instância,
+   selecione na mão.
 3. Confira que os nós do Supabase pegaram a credencial `crm-levy`. Se o id for
    diferente na sua instância, selecione na mão.
 4. Salve e **ative** o fluxo.
@@ -150,9 +150,19 @@ caso grave `disconnected` e ponha o texto original em `last_error`.
 
 ### `delete`
 
-1. `DELETE {base}/instance/delete` com header **admintoken**.
-2. `delete from public.wa_instances where id = $instance_id;` — o token cai
-   junto, por causa do `on delete cascade`.
+São três passos, nesta ordem:
+
+1. **Desconectar primeiro** — `POST {base}/instance/disconnect` com o token da
+   instância. A uazapi espera a sessão encerrada antes de apagar; se já estiver
+   desconectada, o passo não faz mal.
+2. `DELETE {base}/instance/delete` com header **admintoken**.
+3. **Só então** apagar do banco. O fluxo confere se a uazapi confirmou antes de
+   remover a linha — sem essa conferência, uma falha lá (credencial faltando,
+   por exemplo) apagava do CRM e deixava a instância viva na uazapi, e os dois
+   lados ficavam divergentes sem ninguém perceber.
+
+Se a uazapi recusar, a resposta traz o erro e a instância **continua** no CRM,
+de propósito.
 
 Admin pode apagar instância do próprio cliente. Foi decisão consciente: é o
 WhatsApp dele.
