@@ -100,19 +100,19 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ String($json.data !== undefined ? $json.data : $json) }}",
-              "rightValue": "master",
+              "leftValue": "={{ JSON.stringify($('Papel do usuario').first().json) }}",
+              "rightValue": "\"master\"",
               "operator": {
                 "type": "string",
-                "operation": "equals"
+                "operation": "contains"
               }
             },
             {
-              "leftValue": "={{ String($json.data !== undefined ? $json.data : $json) }}",
-              "rightValue": "admin",
+              "leftValue": "={{ JSON.stringify($('Papel do usuario').first().json) }}",
+              "rightValue": "\"admin\"",
               "operator": {
                 "type": "string",
-                "operation": "equals"
+                "operation": "contains"
               }
             }
           ]
@@ -126,7 +126,8 @@
       "position": [
         620,
         300
-      ]
+      ],
+      "notes": "A RPC devolve escalar cru (\"admin\"), e cada versão do n8n embrulha isso de um jeito. Comparar o JSON inteiro por \"contains\" funciona nos dois casos. As aspas no valor procurado evitam casar com outra palavra."
     },
     {
       "parameters": {
