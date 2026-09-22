@@ -83,7 +83,23 @@ begin
     );
   end loop;
 
-  -- 6) clientes e pedidos — só se a base estiver vazia
+  -- 6) clientes e pedidos
+  --    Para refazer a base do zero (por exemplo, depois de mexer nas datas),
+  --    rode antes, numa query separada:
+  --
+  --      delete from public.order_items where order_id in (
+  --        select o.id from public.orders o
+  --        join public.stores s on s.id = o.store_id
+  --        join public.clients c on c.id = s.client_id
+  --        where c.name = 'Loja Demonstração');
+  --      delete from public.orders where store_id in (
+  --        select s.id from public.stores s
+  --        join public.clients c on c.id = s.client_id
+  --        where c.name = 'Loja Demonstração');
+  --      delete from public.customers where client_id in (
+  --        select id from public.clients where name = 'Loja Demonstração');
+  --
+  --    Só apaga dados da loja de demonstração — o filtro pelo nome é a trava.
   if exists (select 1 from public.customers where client_id = v_client) then
     raise notice 'A base de demonstração já tem clientes; nada a semear.';
     return;
@@ -103,14 +119,16 @@ begin
       -- alguns aniversariantes de hoje, para o segmento não ficar vazio
       case when i % 7 = 0 then (current_date - (25 + i) * interval '1 year')::date
            else (current_date - (20 + i) * interval '1 year' - (i * 11) * interval '1 day')::date end,
-      now() - (i * 9) * interval '1 day'
+      now() - (((i * 3) % 50) + 5) * interval '1 day'
     )
     returning id into v_cust;
 
     -- entre 1 e 3 pedidos: gera recorrentes, VIPs e quem comprou uma vez só
     n_ped := 1 + (i % 3);
     for j in 1..n_ped loop
-      v_data := now() - ((i * 9) + (j * 21)) * interval '1 day';
+      -- dentro dos últimos ~45 dias: a Visão Geral abre em "últimos 30 dias",
+      -- e uma demo com receita zerada não demonstra nada
+      v_data := now() - (((i * 2 + j * 7) % 45) + 1) * interval '1 day';
       v_total := 0;
       insert into public.orders
         (store_id, customer_id, marketplace, external_order_id, status, total_amount,
