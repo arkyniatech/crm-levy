@@ -146,11 +146,21 @@ begin
   raise notice 'Demonstração pronta: % clientes na loja %', array_length(nomes, 1), v_client;
 end $$;
 
--- Conferir depois de rodar:
---   select c.name, count(distinct cu.id) as clientes, count(o.id) as pedidos
---   from public.clients c
---   left join public.customers cu on cu.client_id = c.id
---   left join public.stores s on s.client_id = c.id
---   left join public.orders o on o.store_id = s.id
---   where c.name = 'Loja Demonstração'
---   group by c.name;
+-- O resultado abaixo sai junto com a execução. Um bloco DO sozinho responde
+-- "Success. No rows returned" mesmo quando não fez nada — este SELECT existe
+-- para não restar dúvida.
+select
+  c.name                                                as loja,
+  (select count(*) from public.user_clients uc
+    where uc.client_id = c.id)                          as acessos,
+  (select count(*) from public.stores s
+    where s.client_id = c.id)                           as contas_marketplace,
+  (select count(*) from public.customers cu
+    where cu.client_id = c.id)                          as clientes,
+  (select count(*) from public.orders o
+    join public.stores s2 on s2.id = o.store_id
+    where s2.client_id = c.id)                          as pedidos,
+  (select count(*) from public.products pr
+    where pr.client_id = c.id)                          as produtos
+from public.clients c
+where c.name = 'Loja Demonstração';
