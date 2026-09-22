@@ -30,7 +30,7 @@ declare
   v_sku    text;
   v_data   timestamptz;
   nomes text[] := array[
-    'Ana Beatriz Moreira','Carlos Eduardo Lima','Daniela NunesPrado','Eduardo Tavares Rocha',
+    'Ana Beatriz Moreira','Carlos Eduardo Lima','Daniela Nunes Prado','Eduardo Tavares Rocha',
     'Fernanda Quirino Alves','Gabriel Macedo Pinto','Helena Vasconcelos Dias','Igor Sampaio Braga',
     'Juliana Peixoto Faria','Kleber Andrade Matos','Larissa Fontes Correia','Marcelo Vidal Siqueira',
     'Natália Bastos Camargo','Otávio Rezende Portela','Patrícia Lemos Bandeira','Rafael Goulart Teles',
@@ -70,10 +70,17 @@ begin
   end if;
 
   -- 5) produtos com estoque
+  --    Sem "on conflict (client_id, sku)": a unique que o stock-schema.sql
+  --    declara não existe neste banco (a tabela é anterior ao arquivo, e
+  --    "create table if not exists" não acrescenta constraint em tabela que
+  --    já está lá). O "where not exists" faz o mesmo sem depender dela.
   for i in 1..array_length(skus, 1) loop
     insert into public.products (client_id, sku, name, stock, price, active)
-    values (v_client, skus[i], prods[i], 40 + i * 7, precos[i], true)
-    on conflict (client_id, sku) do nothing;
+    select v_client, skus[i], prods[i], 40 + i * 7, precos[i], true
+    where not exists (
+      select 1 from public.products
+      where client_id = v_client and sku = skus[i]
+    );
   end loop;
 
   -- 6) clientes e pedidos — só se a base estiver vazia
