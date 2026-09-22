@@ -574,3 +574,41 @@ export function useEnrichRuns(limit = 30) {
     },
   })
 }
+
+
+export interface EnrichStat {
+  client_id: string
+  loja: string | null
+  execucoes: number
+  solicitados: number
+  enriquecidos: number
+  ultima: string | null
+}
+
+/** Consumo de enriquecimento por loja. Só master recebe linhas. */
+export function useEnrichStats() {
+  return useQuery({
+    queryKey: ['enrich-stats'],
+    queryFn: async (): Promise<EnrichStat[]> => {
+      const { data, error } = await supabase.rpc('crm_enrich_stats')
+      if (error) throw new Error(error.message)
+      return (data ?? []) as EnrichStat[]
+    },
+  })
+}
+
+/** Quantos clientes estão elegíveis para enriquecimento na loja ativa. */
+export function useEnrichPendentes() {
+  const { activeClient } = useCompany()
+  return useQuery({
+    queryKey: ['enrich-pendentes', activeClient?.id],
+    enabled: Boolean(activeClient),
+    queryFn: async (): Promise<number> => {
+      const { data, error } = await supabase.rpc('crm_enrich_pendentes_total', {
+        p_client_id: activeClient!.id,
+      })
+      if (error) throw new Error(error.message)
+      return Number(data) || 0
+    },
+  })
+}

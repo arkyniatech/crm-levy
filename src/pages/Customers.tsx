@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Search, Sparkles, UserPlus, X } from 'lucide-react'
 import {
+  useEnrichPendentes,
   useEnrichRuns,
   CUSTOMERS_PAGE_SIZE,
   useAddCustomer,
@@ -29,6 +30,7 @@ const TABS: { key: CustTab; label: string }[] = [
 const ENRIQUECER_MAX = 100
 
 function EnrichControl() {
+  const { data: pendentes } = useEnrichPendentes()
   const [limit, setLimit] = useState(10)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
@@ -100,6 +102,11 @@ function EnrichControl() {
       </button>
       {msg && (
         <span className={`text-xs ${msg.tone === 'ok' ? 'text-emerald-700' : 'text-red-700'}`}>{msg.text}</span>
+      )}
+      {pendentes !== undefined && (
+        <span className="text-xs text-gray-500" title="Sem enriquecimento ainda, ou já enriquecidos mas sem telefone">
+          <span className="font-medium tabular-nums text-gray-700">{pendentes}</span> na fila
+        </span>
       )}
       <button
         type="button"

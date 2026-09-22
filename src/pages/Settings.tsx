@@ -16,10 +16,11 @@ import {
   type GrantableRole,
 } from '../hooks/adminUsers'
 import { useCompany } from '../context/CompanyContext'
+import { useEnrichStats } from '../hooks/queries'
 import { can, ROLE_LABEL } from '../lib/permissions'
 import StoresGrid from '../components/StoresGrid'
 import { formatDate } from '../lib/format'
-import { PageHeader } from '../components/ui'
+import { ErrorState, PageHeader } from '../components/ui'
 
 function AdminUsersSection({ isMaster }: { isMaster: boolean }) {
   const { clients, activeClient } = useCompany()
@@ -397,6 +398,66 @@ function CampaignDelaySection() {
   )
 }
 
+/** Consumo de enriquecimento por loja — só master enxerga. */
+function EnrichStatsSection() {
+  const { data: linhas, isLoading, error } = useEnrichStats()
+
+  if (error) return <ErrorState message={(error as Error).message} />
+
+  const total = (linhas ?? []).reduce((acc, l) => acc + Number(l.enriquecidos), 0)
+
+  return (
+    <section className="card p-5">
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-brand-600" aria-hidden />
+        <h2 className="font-display text-sm font-semibold text-gray-900">Enriquecimentos por loja (master)</h2>
+      </div>
+      <p className="mt-1 text-sm text-gray-500">
+        Quanto cada cliente já consumiu da NovaVida. Enriquecimento não desconta do saldo de notas —
+        este número existe para acompanhar custo.
+      </p>
+
+      {isLoading ? (
+        <p className="mt-3 text-sm text-gray-400">Carregando…</p>
+      ) : !linhas || linhas.length === 0 ? (
+        <p className="mt-3 text-sm text-gray-400">Nenhuma loja cadastrada.</p>
+      ) : (
+        <div className="mt-3 overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead>
+              <tr>
+                <th className="th">Loja</th>
+                <th className="th text-right">Execuções</th>
+                <th className="th text-right">Pedidos</th>
+                <th className="th text-right">Com dado</th>
+                <th className="th">Última</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {linhas.map((l) => (
+                <tr key={l.client_id}>
+                  <td className="td">{l.loja ?? 'Sem nome'}</td>
+                  <td className="td text-right tabular-nums">{l.execucoes}</td>
+                  <td className="td text-right tabular-nums">{l.solicitados}</td>
+                  <td className="td text-right font-medium tabular-nums text-emerald-700">
+                    {l.enriquecidos}
+                  </td>
+                  <td className="td whitespace-nowrap tabular-nums text-gray-500">
+                    {l.ultima ? formatDate(l.ultima) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-xs text-gray-500">
+            {total} enriquecimento{total === 1 ? '' : 's'} com resultado no total.
+          </p>
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default function Settings() {
   const { data: role } = useUserRole()
   const isMaster = role === 'master'
@@ -407,6 +468,7 @@ export default function Settings() {
 
       <div className="space-y-6">
         {isMaster && <AdminCreditsSection />}
+        {isMaster && <EnrichStatsSection />}
         {canManageUsers && <AdminUsersSection isMaster={isMaster} />}
         <CampaignDelaySection />
 

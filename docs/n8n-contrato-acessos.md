@@ -200,3 +200,33 @@ loja troca de dono a cada importação.
 O conserto é trocar a unique de `stores` para `(client_id, marketplace,
 external_shop_id)` e ajustar o `on_conflict`. Não é urgente enquanto os
 emitentes tiverem CNPJ, mas é dívida registrada.
+
+---
+
+# Anexo — quem o enriquecimento pode processar
+
+O fluxo `unificca-enrich-clientes` escolhia sozinho quais clientes enriquecer.
+A regra passou a viver no banco, numa função só, para não haver duas definições
+divergentes de "pendente".
+
+**Regra:** enriquece apenas CPF que nunca passou por enriquecimento
+(`extra->>enriched_at` nulo) **ou** que já passou mas está sem telefone. Quem
+já foi enriquecido e tem telefone não volta para a fila — seria pagar de novo
+por um dado que já está lá.
+
+No lugar do filtro próprio, o fluxo chama:
+
+```
+POST /rest/v1/rpc/crm_enrich_pendentes
+{ "p_client_id": "<uuid>", "p_limit": <quantos> }
+```
+
+Devolve `[{ id, cpf, nome }]`, já na ordem certa (mais recentes primeiro) e
+limitado. A função é `security definer` e só a `service_role` executa.
+
+Depois de enriquecer, o fluxo continua gravando `extra.enriched_at` no cliente
+— é esse campo que tira a pessoa da fila e alimenta a aba "Enriquecidos".
+
+A tela mostra o tamanho da fila com `crm_enrich_pendentes_total`, que aplica a
+mesma regra. Se você mudar a regra, mude nas duas funções juntas: elas estão no
+mesmo arquivo, `supabase/enriquecimento-elegiveis.sql`.
