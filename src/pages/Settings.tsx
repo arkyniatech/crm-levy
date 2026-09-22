@@ -272,11 +272,11 @@ function AdminCreditsSection() {
     <section className="card border-brand-100 p-5">
       <div className="flex items-center gap-2">
         <ShieldCheck className="h-4 w-4 text-brand-600" aria-hidden />
-        <h2 className="font-display text-sm font-semibold text-gray-900">Créditos de enriquecimento (admin)</h2>
+        <h2 className="font-display text-sm font-semibold text-gray-900">Saldo de notas (master)</h2>
       </div>
       <p className="mt-1 text-sm text-gray-500">
-        Saldo de créditos NovaVida — 1 crédito = 1 enriquecimento. Cada enriquecimento desconta automaticamente.
-        Recarregue aqui quando comprar mais.
+        <b>1 crédito = 1 nota fiscal importada.</b> Cada importação desconta o total de notas lidas,
+        automaticamente. Recarregue aqui quando o cliente contratar mais.
       </p>
 
       <div className="mt-3 inline-flex items-center gap-2 rounded-md bg-brand-50 px-3 py-2 text-sm">
@@ -292,7 +292,7 @@ function AdminCreditsSection() {
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <label className="block">
-          <span className="text-sm font-medium text-gray-700">Novo saldo (créditos)</span>
+          <span className="text-sm font-medium text-gray-700">Novo saldo (notas)</span>
           <input
             type="number"
             min={0}

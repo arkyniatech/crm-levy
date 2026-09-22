@@ -23,7 +23,7 @@ export type Permission =
   /** Capacidades dentro das telas */
   | 'customerData' // ver nome/telefone/CPF de cliente em qualquer lugar
   | 'manageUsers' // criar e revogar acessos do cliente
-  | 'credits' // mexer no saldo de créditos de enriquecimento
+  | 'credits' // recarregar o saldo de notas do cliente
   | 'manageClients' // cadastrar cliente novo e as lojas dele
   | 'waInstances' // conectar e desconectar o WhatsApp do cliente
 

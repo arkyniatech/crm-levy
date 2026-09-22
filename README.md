@@ -107,6 +107,18 @@ policy nenhuma — invisível para anon e authenticated, igual a `store_tokens`.
 Rode `supabase/wa-instances-schema.sql` e siga `docs/n8n-whatsapp-uazapi.md`.
 Precisa da variável `VITE_N8N_WA_INSTANCE_URL`.
 
+## Saldo de notas
+
+1 crédito = 1 nota fiscal importada. Cada importação desconta o total de notas
+lidas, por um gatilho sobre `nfe_imports` — o mesmo registro que alimenta o
+histórico. Não existe caminho que grave um sem o outro.
+
+O master recarrega em Configurações. A chave no banco ainda se chama
+`enrichment_credits`, de quando o crédito era consumido por enriquecimento;
+o nome é histórico. Rode `supabase/creditos-por-nota.sql`.
+
+Enriquecer **não** consome mais crédito.
+
 ## Histórico de enriquecimento
 
 Na tela **Clientes**, ao lado do botão de enriquecer, o link **Histórico** abre

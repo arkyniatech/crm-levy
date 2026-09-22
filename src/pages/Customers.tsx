@@ -13,7 +13,7 @@ import {
 } from '../hooks/queries'
 import { enrichCustomers, registrarEnriquecimento } from '../hooks/enrich'
 import { useCompany } from '../context/CompanyContext'
-import { useEnrichmentCredits, useSpendCredits } from '../hooks/settings'
+
 import { formatCurrency, formatDate, formatDateTime, formatPhone, maskCpf, toE164 } from '../lib/format'
 import { EmptyState, ErrorState, LoadingRows, PageHeader, Pagination, StatusBadge } from '../components/ui'
 
@@ -25,10 +25,10 @@ const TABS: { key: CustTab; label: string }[] = [
   { key: 'no_phone', label: 'Sem telefone' },
 ]
 
+/** Teto do que se pede por vez — o enriquecimento não consome mais crédito. */
+const ENRIQUECER_MAX = 100
+
 function EnrichControl() {
-  const { data: credits } = useEnrichmentCredits()
-  const spend = useSpendCredits()
-  const balance = credits?.balance ?? 0
   const [limit, setLimit] = useState(10)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
@@ -37,13 +37,9 @@ function EnrichControl() {
   const { activeClient } = useCompany()
 
   const run = async () => {
-    if (balance <= 0) {
-      setMsg({ tone: 'err', text: 'Sem créditos. Recarregue para enriquecer.' })
-      return
-    }
     setBusy(true)
     setMsg(null)
-    const pedidos = Math.max(1, Math.min(limit, balance))
+    const pedidos = Math.max(1, Math.min(limit, ENRIQUECER_MAX))
     const res = await enrichCustomers(pedidos, activeClient?.id)
     setBusy(false)
 
@@ -61,8 +57,10 @@ function EnrichControl() {
     }
 
     const n = res.enriquecidos ?? 0
-    if (n > 0) await spend(n)
-    setMsg({ tone: 'ok', text: `${n} enriquecido(s). Restam ${Math.max(0, balance - n)} créditos.` })
+    setMsg({
+      tone: n > 0 ? 'ok' : 'err',
+      text: n > 0 ? `${n} cliente(s) enriquecido(s).` : 'Nenhum cliente voltou com dado novo.',
+    })
     // Registrar a tentativa que voltou vazia importa tanto quanto a que deu
     // certo: é ela que explica crédito gasto sem resultado na tela.
     if (activeClient) {
@@ -81,34 +79,25 @@ function EnrichControl() {
       <input
         type="number"
         min={1}
-        max={Math.max(1, balance)}
+        max={ENRIQUECER_MAX}
         className="input w-20"
         value={limit}
         onChange={(e) =>
-          setLimit(Math.max(1, Math.min(balance > 0 ? balance : 1, Number(e.target.value) || 1)))
+          setLimit(Math.max(1, Math.min(ENRIQUECER_MAX, Number(e.target.value) || 1)))
         }
         aria-label="Quantos clientes enriquecer"
-        title="Quantos clientes buscar dados na NovaVida (limitado pelo saldo)"
+        title="Quantos clientes buscar dados na NovaVida"
       />
       <button
         type="button"
         className="btn-primary shrink-0"
         onClick={() => void run()}
-        disabled={busy || balance <= 0}
+        disabled={busy}
         title="Busca nome, telefone, e-mail e endereço pelo CPF (NovaVida)"
       >
         <Sparkles className="h-4 w-4" aria-hidden />
         {busy ? 'Enriquecendo…' : 'Enriquecer dados'}
       </button>
-      {credits && (
-        <span className="text-xs text-gray-500">
-          <span className={`font-medium tabular-nums ${balance <= 0 ? 'text-red-600' : 'text-gray-700'}`}>
-            {balance}
-          </span>{' '}
-          créditos
-          {credits.validUntil && <span className="text-gray-400"> · até {formatDate(credits.validUntil)}</span>}
-        </span>
-      )}
       {msg && (
         <span className={`text-xs ${msg.tone === 'ok' ? 'text-emerald-700' : 'text-red-700'}`}>{msg.text}</span>
       )}
