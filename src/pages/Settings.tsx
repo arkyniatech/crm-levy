@@ -19,7 +19,7 @@ import { useCompany } from '../context/CompanyContext'
 import { can, ROLE_LABEL } from '../lib/permissions'
 import StoresGrid from '../components/StoresGrid'
 import { formatDate } from '../lib/format'
-import { PageHeader, StatusBadge } from '../components/ui'
+import { PageHeader } from '../components/ui'
 
 function AdminUsersSection({ isMaster }: { isMaster: boolean }) {
   const { clients, activeClient } = useCompany()
@@ -31,6 +31,7 @@ function AdminUsersSection({ isMaster }: { isMaster: boolean }) {
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<GrantableRole>('collaborator')
   const [busy, setBusy] = useState(false)
+  const [trocando, setTrocando] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
 
   const clientId = (isMaster ? targetClientId : activeClient?.id) ?? activeClient?.id ?? null
@@ -104,6 +105,21 @@ function AdminUsersSection({ isMaster }: { isMaster: boolean }) {
     setEmail('')
     setPassword('')
     setRole('collaborator')
+    void carregar(clientId)
+  }
+
+  // Conceder de novo com outro papel é um upsert, então serve de troca.
+  const trocarPapel = async (a: AcessoDaLoja, papel: GrantableRole) => {
+    if (!clientId || papel === a.role) return
+    setTrocando(a.user_id)
+    setMsg(null)
+    const res = await concederAcesso(clientId, a.email, papel)
+    setTrocando(null)
+    if (!res.ok) {
+      setMsg({ tone: 'err', text: res.error ?? 'Falha ao trocar o papel.' })
+      return
+    }
+    setMsg({ tone: 'ok', text: `${a.email} agora é ${ROLE_LABEL[papel].toLowerCase()}.` })
     void carregar(clientId)
   }
 
@@ -201,10 +217,16 @@ function AdminUsersSection({ isMaster }: { isMaster: boolean }) {
                 <p className="text-xs text-gray-400">desde {formatDate(a.created_at)}</p>
               </div>
               <div className="flex items-center gap-2">
-                <StatusBadge
-                  status={a.role === 'admin' ? 'Administrador' : 'Colaborador'}
-                  tone={a.role === 'admin' ? 'ok' : 'neutral'}
-                />
+                <select
+                  className="input w-40 py-1.5 text-sm"
+                  value={a.role}
+                  disabled={trocando === a.user_id}
+                  onChange={(e) => void trocarPapel(a, e.target.value as GrantableRole)}
+                  aria-label={`Papel de ${a.email}`}
+                >
+                  <option value="collaborator">Colaborador</option>
+                  <option value="admin">Administrador</option>
+                </select>
                 <button
                   type="button"
                   className="inline-flex items-center justify-center rounded-md border border-gray-300 p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600"
