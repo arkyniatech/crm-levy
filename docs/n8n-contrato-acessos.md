@@ -111,3 +111,92 @@ Mudanças:
 Criando um colaborador de teste e, com o token dele, chamando cada webhook na
 mão (curl/Postman) com o `client_id` de **outra** loja. As quatro chamadas têm
 que voltar 403. Se alguma passar, o fluxo ainda está confiando no payload.
+
+---
+
+# Anexo — tirar o `client_id` fixo do fluxo de NF-e
+
+Urgente a partir do momento em que existe mais de um cliente com acesso (a
+conta de demonstração, por exemplo): hoje **qualquer pessoa logada que importe
+uma nota grava na base do Levy**, porque três nós têm o mesmo uuid escrito na
+mão.
+
+O CRM já manda `client_id` no formulário do upload. Falta o fluxo usar.
+
+A expressão abaixo lê o que veio e só cai no valor fixo se não vier nada. O
+`try/catch` existe porque, quando o fluxo é disparado pelo **formulário do
+próprio n8n**, o nó `Webhook Upload CRM` não executou e `$('...')` lança erro —
+sem o catch, a importação pelo formulário pararia de gravar.
+
+## Nó `Upsert cliente`
+
+Substitua o corpo inteiro por:
+
+```js
+={{ (function(){
+  let cid = null;
+  try { cid = ($('Webhook Upload CRM').first().json.body || {}).client_id || null; } catch (e) {}
+  const b = {
+    client_id: cid || '677c58eb-b3ec-493a-ad14-0d052d7d8a45',
+    cpf: $json.cpf_limpo,
+    updated_at: $now.toISO()
+  };
+  if ($json.buyer_name)  b.name  = $json.buyer_name;
+  if ($json._city)       b.city  = $json._city;
+  if ($json._uf)         b.state = $json._uf;
+  if ($json.buyer_email) b.email = $json.buyer_email;
+  if ($json.buyer_phone) b.phone = $json.buyer_phone;
+  return JSON.stringify(b);
+})() }}
+```
+
+## Nó `Upsert loja`
+
+```js
+={{ (function(){
+  let cid = null;
+  try { cid = ($('Webhook Upload CRM').first().json.body || {}).client_id || null; } catch (e) {}
+  const p = $('Preparar persistencia').item.json;
+  return JSON.stringify({
+    client_id: cid || '677c58eb-b3ec-493a-ad14-0d052d7d8a45',
+    marketplace: p.mp,
+    name: p.shop_name,
+    external_shop_id: p.shop_id,
+    updated_at: $now.toISO()
+  });
+})() }}
+```
+
+## Nó `Baixar estoque`
+
+Já está no anexo de `n8n-resumo-importacao.md`, junto da troca do `p_ref`.
+
+## Como testar que funcionou
+
+Entre com o login de demonstração, importe **uma** nota e confira em qual
+cliente ela caiu:
+
+```sql
+select c.name, count(*) as pedidos
+from public.orders o
+join public.stores s on s.id = o.store_id
+join public.clients c on c.id = s.client_id
+where o.created_at > now() - interval '10 minutes'
+group by c.name;
+```
+
+Tem que aparecer **Loja Demonstração**. Se aparecer o cliente do Levy, algum
+dos três nós ficou com o uuid fixo.
+
+## Um detalhe que ainda morde depois
+
+O `Upsert loja` usa `on_conflict=marketplace,external_shop_id`, sem o
+`client_id`. Como a nota gera `external_shop_id` a partir do CNPJ do emitente
+(`emit:<cnpj>`), dois clientes diferentes não costumam colidir — mas a base do
+Levy já tem uma loja `Shopee · emit:` com o CNPJ vazio. Se a nota de outro
+cliente também vier sem CNPJ do emitente, as duas disputam a mesma linha e a
+loja troca de dono a cada importação.
+
+O conserto é trocar a unique de `stores` para `(client_id, marketplace,
+external_shop_id)` e ajustar o `on_conflict`. Não é urgente enquanto os
+emitentes tiverem CNPJ, mas é dívida registrada.

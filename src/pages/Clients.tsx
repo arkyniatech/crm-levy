@@ -365,8 +365,8 @@ export default function Clients() {
   return (
     <div>
       <PageHeader
-        title="Clientes e lojas"
-        subtitle="Cada cliente é uma empresa; as lojas dele são as contas de marketplace"
+        title="Gerenciar Lojas"
+        subtitle="Cada loja é uma empresa cliente; dentro dela ficam as contas de marketplace"
       >
         <NovoCliente />
       </PageHeader>

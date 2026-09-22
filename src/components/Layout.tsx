@@ -33,7 +33,7 @@ const NAV: { to: string; label: string; icon: typeof LayoutDashboard; end?: bool
   { to: '/campanhas', label: 'Campanhas', icon: Megaphone, permission: 'campaigns' },
   { to: '/whatsapp', label: 'WhatsApp', icon: Smartphone, permission: 'waInstances' },
   { to: '/importar', label: 'Importar NF-e', icon: FileUp, permission: 'importNfe' },
-  { to: '/clientes-lojas', label: 'Clientes e lojas', icon: Building2, permission: 'manageClients' },
+  { to: '/clientes-lojas', label: 'Gerenciar Lojas', icon: Building2, permission: 'manageClients' },
 ]
 
 const SOON: { label: string; icon: typeof Settings }[] = []
