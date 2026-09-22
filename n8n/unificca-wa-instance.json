@@ -180,7 +180,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ ok: false, error: \"Só administrador ou master pode gerenciar o WhatsApp deste cliente.\" }) }}",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: \"Só administrador ou master pode gerenciar o WhatsApp deste cliente. (diagnóstico — crm_role_of devolveu: \" + JSON.stringify($('Papel do usuario').first().json) + \" · client_id: \" + ($('Contexto').first().json.client_id || \"vazio\") + \" · user_id: \" + ($('Contexto').first().json.user_id || \"vazio\") + \")\" }) }}",
         "options": {
           "responseCode": 403
         }
@@ -192,7 +192,8 @@
       "position": [
         840,
         80
-      ]
+      ],
+      "notes": "O texto traz o retorno cru da RPC de propósito: sem isso, um 403 não distingue papel insuficiente de função inacessível. Tire quando o fluxo estabilizar."
     },
     {
       "parameters": {
