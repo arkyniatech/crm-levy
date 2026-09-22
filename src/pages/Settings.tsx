@@ -7,7 +7,14 @@ import {
   useEnrichmentCredits,
   useSaveCredits,
 } from '../hooks/settings'
-import { listUsers, createUser, revokeUser, type AdminUser, type GrantableRole } from '../hooks/adminUsers'
+import {
+  concederAcesso,
+  createUser,
+  listarAcessos,
+  revogarAcesso,
+  type AcessoDaLoja,
+  type GrantableRole,
+} from '../hooks/adminUsers'
 import { useCompany } from '../context/CompanyContext'
 import { can, ROLE_LABEL } from '../lib/permissions'
 import StoresGrid from '../components/StoresGrid'
@@ -18,7 +25,7 @@ function AdminUsersSection({ isMaster }: { isMaster: boolean }) {
   const { clients, activeClient } = useCompany()
   // Master escolhe a loja; admin só mexe na loja em que está.
   const [targetClientId, setTargetClientId] = useState<string | null>(activeClient?.id ?? null)
-  const [users, setUsers] = useState<AdminUser[]>([])
+  const [acessos, setAcessos] = useState<AcessoDaLoja[]>([])
   const [loading, setLoading] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -33,67 +40,89 @@ function AdminUsersSection({ isMaster }: { isMaster: boolean }) {
     if (!targetClientId && activeClient) setTargetClientId(activeClient.id)
   }, [activeClient, targetClientId])
 
+  const carregar = async (id: string) => {
+    try {
+      setAcessos(await listarAcessos(id))
+    } catch (e) {
+      setMsg({ tone: 'err', text: (e as Error).message })
+    }
+  }
+
   useEffect(() => {
     if (!clientId) return
     let cancelado = false
     setLoading(true)
-    void listUsers(clientId).then((res) => {
-      if (cancelado) return
-      setLoading(false)
-      if (res.ok) setUsers(res.users ?? [])
-      else setMsg({ tone: 'err', text: res.error ?? 'Falha ao listar usuários.' })
-    })
+    void listarAcessos(clientId)
+      .then((lista) => {
+        if (!cancelado) setAcessos(lista)
+      })
+      .catch((e) => {
+        if (!cancelado) setMsg({ tone: 'err', text: (e as Error).message })
+      })
+      .finally(() => {
+        if (!cancelado) setLoading(false)
+      })
     return () => {
       cancelado = true
     }
   }, [clientId])
 
-  const reload = async () => {
-    if (!clientId) return
-    const res = await listUsers(clientId)
-    if (res.ok) setUsers(res.users ?? [])
-  }
-
   const add = async () => {
     if (!clientId) return
-    if (!email.trim() || password.length < 6) {
-      setMsg({ tone: 'err', text: 'Informe e-mail e uma senha de pelo menos 6 caracteres.' })
+    if (!email.trim()) {
+      setMsg({ tone: 'err', text: 'Informe o e-mail.' })
+      return
+    }
+    if (password && password.length < 6) {
+      setMsg({ tone: 'err', text: 'A senha precisa ter pelo menos 6 caracteres.' })
       return
     }
     setBusy(true)
     setMsg(null)
-    const res = await createUser(email.trim(), password, role, clientId)
+
+    // Com senha, cria o login antes (isso exige service_role, então vai pelo
+    // n8n). Sem senha, o login já existe e só falta o vínculo com a loja.
+    if (password) {
+      const criado = await createUser(email.trim(), password, role, clientId)
+      if (!criado.ok) {
+        setBusy(false)
+        setMsg({ tone: 'err', text: `Não deu para criar o login: ${criado.error}` })
+        return
+      }
+    }
+
+    const res = await concederAcesso(clientId, email.trim(), role)
     setBusy(false)
     if (!res.ok) {
-      setMsg({ tone: 'err', text: res.error ?? 'Falha ao criar usuário.' })
+      setMsg({ tone: 'err', text: res.error ?? 'Falha ao conceder acesso.' })
       return
     }
     setMsg({
       tone: 'ok',
-      text: `Acesso de ${ROLE_LABEL[role].toLowerCase()} criado em ${targetClient?.name ?? 'esta loja'}.`,
+      text: `${email.trim()} agora é ${ROLE_LABEL[role].toLowerCase()} em ${targetClient?.name ?? 'esta loja'}.`,
     })
     setEmail('')
     setPassword('')
     setRole('collaborator')
-    void reload()
+    void carregar(clientId)
   }
 
-  const revoke = async (u: AdminUser) => {
+  const revoke = async (a: AcessoDaLoja) => {
     if (!clientId) return
     if (
       !window.confirm(
-        `Remover o acesso de ${u.email} em ${targetClient?.name ?? 'esta loja'}? ` +
+        `Remover o acesso de ${a.email} em ${targetClient?.name ?? 'esta loja'}? ` +
           '(o login continua existindo, só perde acesso a esta loja)',
       )
     )
       return
     setMsg(null)
-    const res = await revokeUser(u.id, clientId)
+    const res = await revogarAcesso(clientId, a.user_id)
     if (!res.ok) {
       setMsg({ tone: 'err', text: res.error ?? 'Falha ao remover acesso.' })
       return
     }
-    void reload()
+    void carregar(clientId)
   }
 
   return (
@@ -104,7 +133,8 @@ function AdminUsersSection({ isMaster }: { isMaster: boolean }) {
       </div>
       <p className="mt-1 text-sm text-gray-500">
         O acesso vale <b>por loja</b>. <b>Administrador</b> vê e faz tudo dentro dela;{' '}
-        <b>Colaborador</b> só importa NF-e e opera campanhas — sem acesso à base de clientes, vendas e produtos.
+        <b>Colaborador</b> só importa NF-e e opera campanhas — sem acesso à base de clientes,
+        vendas e produtos. Quem é master não aparece aqui: master enxerga todas as lojas.
       </p>
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
@@ -126,16 +156,16 @@ function AdminUsersSection({ isMaster }: { isMaster: boolean }) {
         )}
         <label className="block">
           <span className="text-sm font-medium text-gray-700">E-mail</span>
-          <input type="email" className="input mt-1 w-56" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input type="email" className="input mt-1 w-64" value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>
         <label className="block">
           <span className="text-sm font-medium text-gray-700">Senha</span>
           <input
             type="password"
-            className="input mt-1 w-40"
+            className="input mt-1 w-44"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="mín. 6 caracteres"
+            placeholder="só p/ login novo"
           />
         </label>
         <label className="block">
@@ -147,38 +177,40 @@ function AdminUsersSection({ isMaster }: { isMaster: boolean }) {
         </label>
         <button type="button" className="btn-primary" onClick={() => void add()} disabled={busy}>
           <UserPlus className="h-4 w-4" aria-hidden />
-          {busy ? 'Criando…' : 'Criar acesso'}
+          {busy ? 'Salvando…' : 'Dar acesso'}
         </button>
-        {msg && (
-          <span className={`text-sm ${msg.tone === 'ok' ? 'text-emerald-700' : 'text-red-700'}`}>{msg.text}</span>
-        )}
       </div>
+      <p className="mt-2 text-xs text-gray-500">
+        Se o e-mail já tem login, deixe a senha em branco — o acesso é concedido na hora. A senha
+        só é usada para criar um login que ainda não existe.
+      </p>
+      {msg && (
+        <p className={`mt-2 text-sm ${msg.tone === 'ok' ? 'text-emerald-700' : 'text-red-700'}`}>{msg.text}</p>
+      )}
 
       <div className="mt-4 divide-y divide-gray-100 border-t border-gray-100">
         {loading ? (
-          <p className="py-3 text-sm text-gray-400">Carregando usuários…</p>
-        ) : users.length === 0 ? (
+          <p className="py-3 text-sm text-gray-400">Carregando acessos…</p>
+        ) : acessos.length === 0 ? (
           <p className="py-3 text-sm text-gray-400">Nenhum acesso nesta loja ainda.</p>
         ) : (
-          users.map((u) => (
-            <div key={u.id} className="flex items-center justify-between gap-2 py-2">
+          acessos.map((a) => (
+            <div key={a.user_id} className="flex items-center justify-between gap-2 py-2">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-gray-800">{u.email}</p>
-                {u.created_at && (
-                  <p className="text-xs text-gray-400">desde {formatDate(u.created_at)}</p>
-                )}
+                <p className="truncate text-sm font-medium text-gray-800">{a.email}</p>
+                <p className="text-xs text-gray-400">desde {formatDate(a.created_at)}</p>
               </div>
               <div className="flex items-center gap-2">
                 <StatusBadge
-                  status={u.role === 'admin' ? 'Administrador' : 'Colaborador'}
-                  tone={u.role === 'admin' ? 'ok' : 'neutral'}
+                  status={a.role === 'admin' ? 'Administrador' : 'Colaborador'}
+                  tone={a.role === 'admin' ? 'ok' : 'neutral'}
                 />
                 <button
                   type="button"
                   className="inline-flex items-center justify-center rounded-md border border-gray-300 p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600"
-                  onClick={() => void revoke(u)}
+                  onClick={() => void revoke(a)}
                   title="Remover acesso"
-                  aria-label={`Remover acesso de ${u.email}`}
+                  aria-label={`Remover acesso de ${a.email}`}
                 >
                   <Trash2 className="h-4 w-4" aria-hidden />
                 </button>

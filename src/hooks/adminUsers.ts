@@ -61,3 +61,54 @@ export function createUser(
 export function revokeUser(userId: string, clientId: string): Promise<AdminResponse> {
   return call({ action: 'revoke', user_id: userId, client_id: clientId })
 }
+
+
+/* ---------------------------------------------------------------------------
+ * Acessos lidos e escritos direto do Supabase.
+ *
+ * A listagem pelo webhook do n8n devolvia os acessos errados: aquele fluxo é
+ * anterior aos papéis por loja, ignora o client_id e lê papel da tabela antiga.
+ * Listar, conceder e revogar são operações de banco — o RLS já sabe quem pode.
+ * Só criar login NOVO continua no n8n, porque mexe em auth.users.
+ * ------------------------------------------------------------------------- */
+
+export interface AcessoDaLoja {
+  user_id: string
+  email: string
+  role: GrantableRole
+  created_at: string
+}
+
+export async function listarAcessos(clientId: string): Promise<AcessoDaLoja[]> {
+  const { data, error } = await supabase.rpc('crm_client_users', { p_client_id: clientId })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as AcessoDaLoja[]
+}
+
+interface RpcResposta {
+  ok: boolean
+  error?: string
+}
+
+export async function concederAcesso(
+  clientId: string,
+  email: string,
+  role: GrantableRole,
+): Promise<RpcResposta> {
+  const { data, error } = await supabase.rpc('crm_grant_access', {
+    p_client_id: clientId,
+    p_email: email,
+    p_role: role,
+  })
+  if (error) return { ok: false, error: error.message }
+  return (data ?? { ok: false, error: 'Resposta vazia.' }) as RpcResposta
+}
+
+export async function revogarAcesso(clientId: string, userId: string): Promise<RpcResposta> {
+  const { data, error } = await supabase.rpc('crm_revoke_access', {
+    p_client_id: clientId,
+    p_user_id: userId,
+  })
+  if (error) return { ok: false, error: error.message }
+  return (data ?? { ok: false, error: 'Resposta vazia.' }) as RpcResposta
+}
