@@ -158,10 +158,26 @@ set status = $status, phone = $numero, profile_name = $nome,
 where id = $instance_id;
 ```
 
+**Cuidado com o campo `status`: a resposta tem dois.** O formato real é:
+
+```jsonc
+{
+  "instance": { "status": "disconnected", "owner": "5521...", "profileName": "...", ... },
+  "status":   { "connected": false, "loggedIn": false, "jid": null }
+}
+```
+
+O estado que interessa é **`instance.status`**, uma string. O `status` de
+primeiro nível é um objeto de flags — ler ele e passar por `String()` grava
+`[object Object]` no banco, que foi exatamente o que aconteceu.
+
 Os valores possíveis são `disconnected`, `connecting`, `connected`,
 `hibernated`, `registering` e `registration_conflict` — a tela trata os seis.
-Se a uazapi devolver algo fora dessa lista, a constraint da tabela recusa; nesse
-caso grave `disconnected` e ponha o texto original em `last_error`.
+Fora dessa lista, a constraint da tabela recusa: grave `disconnected` e ponha o
+texto original em `last_error`. E **limpe `last_error` em toda leitura boa**,
+senão um aviso antigo fica pendurado no cartão para sempre.
+
+O telefone vem em `instance.owner`, não em `phone`.
 
 ### `disconnect`
 
