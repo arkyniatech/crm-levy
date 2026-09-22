@@ -140,6 +140,19 @@ export function useWaActions() {
   }
 }
 
+/**
+ * Tira a instância só do CRM, sem passar pela uazapi.
+ *
+ * Saída de emergência para quando os dois lados divergem — instância apagada
+ * lá por fora, uazapi indisponível. Sem isto, a linha fica presa: o fluxo se
+ * recusa a apagar sem confirmação, e a confirmação nunca vem.
+ */
+export async function esquecerInstancia(instanceId: string): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc('crm_wa_forget', { p_instance_id: instanceId })
+  if (error) return { ok: false, error: error.message }
+  return (data ?? { ok: false, error: 'Resposta vazia.' }) as { ok: boolean; error?: string }
+}
+
 export const STATUS_LABEL: Record<WaStatus, string> = {
   creating: 'Criando…',
   disconnected: 'Desconectado',

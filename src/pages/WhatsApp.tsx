@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Loader2, Plus, QrCode, RefreshCw, Smartphone, Trash2, Unplug } from 'lucide-react'
 import {
+  esquecerInstancia,
   STATUS_HINT,
   STATUS_LABEL,
   STATUS_TONE,
@@ -41,6 +42,8 @@ function CartaoInstancia({ i }: { i: WaInstance }) {
   const [ocupado, setOcupado] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [conectouAgora, setConectouAgora] = useState(false)
+  // Só aparece depois de um apagar que falhou — não é atalho de uso normal.
+  const [ofereceEsquecer, setOfereceEsquecer] = useState(false)
 
   // As funções vêm novas a cada render; guardar a última num ref evita
   // recriar os intervalos abaixo a cada ciclo.
@@ -127,6 +130,19 @@ function CartaoInstancia({ i }: { i: WaInstance }) {
     )
       return
     await rodar('deletar', () => acoes.deletar(i.id))
+  }
+
+  const esquecer = async () => {
+    if (
+      !window.confirm(
+        'Remover esta instância apenas do CRM?\n\n' +
+          'Use só quando ela já não existe na uazapi. Se ainda existir lá, ela continuará ' +
+          'ativa e fora do seu controle por aqui.',
+      )
+    )
+      return
+    const r = await rodar('esquecer', () => esquecerInstancia(i.id))
+    if (r.ok) setOfereceEsquecer(false)
   }
 
   const conectado = i.status === 'connected'
@@ -217,7 +233,20 @@ function CartaoInstancia({ i }: { i: WaInstance }) {
         </p>
       )}
 
-      {erro && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
+      {erro && (
+        <div className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p>{erro}</p>
+          {ofereceEsquecer && (
+            <button
+              type="button"
+              className="mt-2 underline underline-offset-2 hover:no-underline"
+              onClick={() => void esquecer()}
+            >
+              Remover só do CRM — use se a instância já não existe na uazapi
+            </button>
+          )}
+        </div>
+      )}
 
       {qr && !conectado && (
         <div className="mt-4 flex flex-wrap items-center gap-5 rounded-lg border border-gray-200 bg-gray-50 p-4">

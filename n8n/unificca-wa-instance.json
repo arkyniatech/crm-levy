@@ -948,12 +948,11 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $json.error }}",
-              "rightValue": "",
+              "leftValue": "={{ (function(){\n  const j = $json || {};\n  const e = j.error;\n  if (!e) return 'ok';\n  const t = (typeof e === 'string' ? e : JSON.stringify(e)).toLowerCase();\n  // Instância que já não existe lá é o mesmo resultado de apagada: se\n  // tratarmos 404 como falha, a linha do CRM nunca sai e o usuário fica\n  // com um registro que não dá para remover por caminho nenhum.\n  return (t.indexOf('404') >= 0 || t.indexOf('not found') >= 0) ? 'ok' : 'falhou';\n})() }}",
+              "rightValue": "ok",
               "operator": {
                 "type": "string",
-                "operation": "empty",
-                "singleValue": true
+                "operation": "equals"
               }
             }
           ]
@@ -967,7 +966,8 @@
       "position": [
         1940,
         780
-      ]
+      ],
+      "notes": "Passa quando a uazapi confirmou OU quando a instância já não existe lá (404). Qualquer outro erro segura o delete no banco, para os dois lados não divergirem."
     },
     {
       "parameters": {
