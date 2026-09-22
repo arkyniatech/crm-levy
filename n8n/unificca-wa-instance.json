@@ -64,7 +64,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://lopdvdblwasuowjdokpo.supabase.co/rest/v1/rpc/crm_role_of",
+        "url": "https://lopdvdblwasuowjdokpo.supabase.co/rest/v1/rpc/crm_role_check",
         "options": {},
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
@@ -86,7 +86,8 @@
           "id": "PInceeL9GkpLm81V",
           "name": "crm-levy"
         }
-      }
+      },
+      "notes": "crm_role_check em vez de crm_role_of: a segunda devolve escalar cru (\"admin\") e o nó HTTP do n8n recusa esse corpo como JSON inválido."
     },
     {
       "parameters": {
@@ -100,19 +101,19 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ JSON.stringify($('Papel do usuario').first().json) }}",
-              "rightValue": "\"master\"",
+              "leftValue": "={{ $json.papel }}",
+              "rightValue": "master",
               "operator": {
                 "type": "string",
-                "operation": "contains"
+                "operation": "equals"
               }
             },
             {
-              "leftValue": "={{ JSON.stringify($('Papel do usuario').first().json) }}",
-              "rightValue": "\"admin\"",
+              "leftValue": "={{ $json.papel }}",
+              "rightValue": "admin",
               "operator": {
                 "type": "string",
-                "operation": "contains"
+                "operation": "equals"
               }
             }
           ]
@@ -127,7 +128,7 @@
         620,
         300
       ],
-      "notes": "A RPC devolve escalar cru (\"admin\"), e cada versão do n8n embrulha isso de um jeito. Comparar o JSON inteiro por \"contains\" funciona nos dois casos. As aspas no valor procurado evitam casar com outra palavra."
+      "notes": "Lê o campo papel devolvido por crm_role_check."
     },
     {
       "parameters": {
