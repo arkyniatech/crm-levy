@@ -67,6 +67,17 @@ Resposta esperada em todas:
 { "ok": false, "error": "mensagem que a tela mostra ao usuário" }
 ```
 
+## A regra que vale para todas as funções deste projeto
+
+Função consumida pelo **n8n** recebe o `user_id` como parâmetro. Função
+consumida pela **tela** usa `auth.uid()`. Nunca a mesma para os dois — o n8n
+roda com `service_role`, onde `auth.uid()` é nulo, e a função devolve vazio sem
+erro nenhum.
+
+É por isso que existem os pares `crm_role_in` / `crm_role_of` e
+`crm_wa_instance_quota` / `crm_wa_quota_of`. Os dois pares nasceram de fluxos
+quebrados em produção.
+
 ## Validação — o mesmo de sempre, antes de qualquer ação
 
 1. Extrair o `sub` do JWT (é o `user_id`).
@@ -89,9 +100,13 @@ desconecta o WhatsApp dele.
 
 ### `create`
 
-1. Checar a cota: `select * from public.crm_wa_instance_quota('<client_id>')`.
-   Se `pode_criar` for falso, responder
-   `{ ok:false, error:"Limite de instâncias atingido." }`.
+1. Checar a cota com **`crm_wa_quota_of(<user_id>, <client_id>)`** — a versão
+   que recebe o usuário. A outra, `crm_wa_instance_quota`, usa `auth.uid()` e
+   serve à tela: chamada pelo n8n, que roda como `service_role`, ela devolve
+   zero linhas e mata o fluxo no meio.
+
+   Se `pode_criar` for falso, responder `{ ok:false, error:"Limite de
+   instâncias atingido." }`.
 2. Montar o `instance_name` a partir do rótulo que a pessoa digitou no CRM,
    em slug, com os 8 primeiros caracteres do `client_id` como sufixo — por
    exemplo, "Vendas São Paulo" na loja `677c58eb…` vira

@@ -200,13 +200,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://lopdvdblwasuowjdokpo.supabase.co/rest/v1/rpc/crm_wa_instance_quota",
+        "url": "https://lopdvdblwasuowjdokpo.supabase.co/rest/v1/rpc/crm_wa_quota_of",
         "options": {},
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "supabaseApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ p_client_id: $('Contexto').first().json.client_id }) }}"
+        "jsonBody": "={{ JSON.stringify({ p_user_id: $('Contexto').first().json.user_id, p_client_id: $('Contexto').first().json.client_id }) }}"
       },
       "id": "wa-08",
       "name": "Cota de instancias",
@@ -222,7 +222,9 @@
           "id": "PInceeL9GkpLm81V",
           "name": "crm-levy"
         }
-      }
+      },
+      "alwaysOutputData": true,
+      "notes": "crm_wa_quota_of, não crm_wa_instance_quota: o n8n chama com service_role, onde auth.uid() é nulo. alwaysOutputData para o fluxo não morrer em silêncio se vier vazio."
     },
     {
       "parameters": {
@@ -260,7 +262,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ ok: false, error: \"Limite de \" + $json.limite + \" instância(s) atingido para este cliente.\" }) }}",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: ($json.limite === undefined ? \"Não foi possível ler a cota desta loja — confira se você tem acesso a ela.\" : \"Limite de \" + $json.limite + \" instância(s) atingido para este cliente.\") }) }}",
         "options": {
           "responseCode": 409
         }
@@ -272,7 +274,8 @@
       "position": [
         1500,
         -60
-      ]
+      ],
+      "notes": "Cobre os dois casos: cota cheia, e cota que não veio (sem acesso à loja ou função indisponível). Sem isso o segundo caso não gerava resposta nenhuma e o webhook terminava em 200 vazio."
     },
     {
       "parameters": {

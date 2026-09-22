@@ -62,7 +62,15 @@ async function acao(payload: Record<string, unknown>): Promise<WaActionResponse>
       body: JSON.stringify(payload),
     })
     const json = (await res.json().catch(() => null)) as WaActionResponse | null
-    if (!res.ok || !json?.ok) return { ok: false, error: json?.error ?? `Falha (HTTP ${res.status}).` }
+    if (!json) {
+      // Webhook que termina sem passar por um nó de resposta devolve 200 vazio.
+      // "Falha (HTTP 200)" não dizia nada; isto manda olhar no lugar certo.
+      return {
+        ok: false,
+        error: 'O fluxo do WhatsApp não respondeu. Veja a última execução no n8n — ela parou antes do fim.',
+      }
+    }
+    if (!res.ok || !json.ok) return { ok: false, error: json.error ?? `Falha (HTTP ${res.status}).` }
     return json
   } catch {
     return { ok: false, error: 'Não foi possível falar com o serviço de WhatsApp.' }
