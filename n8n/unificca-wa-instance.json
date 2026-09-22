@@ -827,11 +827,9 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "https://arkyniatech.uazapi.com/instance/delete",
+        "method": "DELETE",
+        "url": "https://arkyniatech.uazapi.com/instance",
         "options": {},
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -851,13 +849,7 @@
         780
       ],
       "onError": "continueRegularOutput",
-      "notes": "GET, não DELETE: a uazapi só aceita OPTIONS e GET nesta rota — com DELETE devolve 405 e a instância não é apagada. Quem identifica a instância é o header token; o admintoken vem da credencial arkynia-uazapi.",
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "DJIqxZLTo4wPJA82",
-          "name": "arkynia-uazapi"
-        }
-      }
+      "notes": "DELETE /instance — não /instance/delete, e autenticado pelo token da instância, não pelo admintoken. Responde 200 quando apaga na hora e 202 quando agenda; os dois contam como sucesso, e repetir a chamada é seguro."
     },
     {
       "parameters": {

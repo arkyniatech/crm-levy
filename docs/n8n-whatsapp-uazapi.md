@@ -191,8 +191,8 @@ São três passos, nesta ordem:
 1. **Desconectar primeiro** — `POST {base}/instance/disconnect` com o token da
    instância. A uazapi espera a sessão encerrada antes de apagar; se já estiver
    desconectada, o passo não faz mal.
-2. `GET {base}/instance/delete` — **GET**, não DELETE; ver a tabela no começo
-   deste documento.
+2. `DELETE {base}/instance` com o **token da instância** — ver a tabela no
+   começo deste documento. Aceita 200 e 202 como sucesso.
 3. **Só então** apagar do banco. O fluxo confere se a uazapi confirmou antes de
    remover a linha — sem essa conferência, uma falha lá (credencial faltando,
    por exemplo) apagava do CRM e deixava a instância viva na uazapi, e os dois
