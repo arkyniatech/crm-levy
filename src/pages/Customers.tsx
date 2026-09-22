@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Search, Sparkles, UserPlus, X } from 'lucide-react'
 import {
+  useEnrichRuns,
   CUSTOMERS_PAGE_SIZE,
   useAddCustomer,
   useCustomers,
@@ -10,10 +11,10 @@ import {
   type ContactFilter,
   type EnrichFilter,
 } from '../hooks/queries'
-import { enrichCustomers } from '../hooks/enrich'
+import { enrichCustomers, registrarEnriquecimento } from '../hooks/enrich'
 import { useCompany } from '../context/CompanyContext'
 import { useEnrichmentCredits, useSpendCredits } from '../hooks/settings'
-import { formatCurrency, formatDate, formatPhone, maskCpf, toE164 } from '../lib/format'
+import { formatCurrency, formatDate, formatDateTime, formatPhone, maskCpf, toE164 } from '../lib/format'
 import { EmptyState, ErrorState, LoadingRows, PageHeader, Pagination, StatusBadge } from '../components/ui'
 
 type CustTab = EnrichFilter | 'no_phone'
@@ -31,6 +32,7 @@ function EnrichControl() {
   const [limit, setLimit] = useState(10)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
+  const [verHistorico, setVerHistorico] = useState(false)
   const queryClient = useQueryClient()
   const { activeClient } = useCompany()
 
@@ -41,15 +43,35 @@ function EnrichControl() {
     }
     setBusy(true)
     setMsg(null)
-    const res = await enrichCustomers(Math.max(1, Math.min(limit, balance)), activeClient?.id)
+    const pedidos = Math.max(1, Math.min(limit, balance))
+    const res = await enrichCustomers(pedidos, activeClient?.id)
     setBusy(false)
+
     if (!res.ok) {
       setMsg({ tone: 'err', text: res.error ?? 'Falha ao enriquecer.' })
+      if (activeClient) {
+        void registrarEnriquecimento({
+          clientId: activeClient.id,
+          solicitados: pedidos,
+          enriquecidos: 0,
+          erro: res.error ?? 'Falha ao enriquecer.',
+        }).then(() => queryClient.invalidateQueries({ queryKey: ['enrich-runs'] }))
+      }
       return
     }
+
     const n = res.enriquecidos ?? 0
     if (n > 0) await spend(n)
     setMsg({ tone: 'ok', text: `${n} enriquecido(s). Restam ${Math.max(0, balance - n)} créditos.` })
+    // Registrar a tentativa que voltou vazia importa tanto quanto a que deu
+    // certo: é ela que explica crédito gasto sem resultado na tela.
+    if (activeClient) {
+      void registrarEnriquecimento({
+        clientId: activeClient.id,
+        solicitados: pedidos,
+        enriquecidos: n,
+      }).then(() => queryClient.invalidateQueries({ queryKey: ['enrich-runs'] }))
+    }
     void queryClient.invalidateQueries({ queryKey: ['customers'] })
     void queryClient.invalidateQueries({ queryKey: ['outreach-stats'] })
   }
@@ -90,6 +112,80 @@ function EnrichControl() {
       {msg && (
         <span className={`text-xs ${msg.tone === 'ok' ? 'text-emerald-700' : 'text-red-700'}`}>{msg.text}</span>
       )}
+      <button
+        type="button"
+        className="text-xs text-gray-500 underline-offset-2 hover:text-gray-700 hover:underline"
+        onClick={() => setVerHistorico((v) => !v)}
+      >
+        {verHistorico ? 'Ocultar histórico' : 'Histórico'}
+      </button>
+      {verHistorico && (
+        <div className="w-full">
+          <HistoricoEnriquecimento />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Quem gastou crédito, quando, e quanto voltou com dado. */
+function HistoricoEnriquecimento() {
+  const { data: corridas, isLoading, error } = useEnrichRuns()
+
+  if (error) return <ErrorState message={(error as Error).message} />
+  if (isLoading) return <LoadingRows cols={5} rows={3} />
+  if (!corridas || corridas.length === 0) {
+    return (
+      <p className="mt-2 text-xs text-gray-400">
+        Nenhum enriquecimento registrado ainda. O histórico começa na próxima vez que você rodar.
+      </p>
+    )
+  }
+
+  const gasto = corridas.reduce((s, c) => s + c.creditos_gastos, 0)
+
+  return (
+    <div className="card mt-3 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="th">Quando</th>
+              <th className="th">Quem</th>
+              <th className="th text-right">Pedidos</th>
+              <th className="th text-right">Com dado</th>
+              <th className="th text-right">Créditos</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {corridas.map((c) => (
+              <tr key={c.id} className="hover:bg-gray-50">
+                <td className="td whitespace-nowrap tabular-nums">{formatDateTime(c.created_at)}</td>
+                <td className="td max-w-[13rem] truncate" title={c.email ?? ''}>
+                  {c.email ?? '—'}
+                </td>
+                <td className="td text-right tabular-nums">{c.solicitados}</td>
+                <td className="td text-right tabular-nums">
+                  {c.status === 'erro' ? (
+                    <span className="text-red-700" title={c.erro ?? ''}>
+                      falhou
+                    </span>
+                  ) : (
+                    <span className={c.enriquecidos === 0 ? 'text-amber-700' : 'font-medium text-emerald-700'}>
+                      {c.enriquecidos}
+                    </span>
+                  )}
+                </td>
+                <td className="td text-right tabular-nums text-gray-500">{c.creditos_gastos}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="border-t border-gray-100 px-4 py-2 text-xs text-gray-500">
+        {gasto} crédito{gasto === 1 ? '' : 's'} consumido{gasto === 1 ? '' : 's'} nas últimas{' '}
+        {corridas.length} execuç{corridas.length === 1 ? 'ão' : 'ões'}.
+      </p>
     </div>
   )
 }

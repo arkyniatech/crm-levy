@@ -107,6 +107,19 @@ policy nenhuma — invisível para anon e authenticated, igual a `store_tokens`.
 Rode `supabase/wa-instances-schema.sql` e siga `docs/n8n-whatsapp-uazapi.md`.
 Precisa da variável `VITE_N8N_WA_INSTANCE_URL`.
 
+## Histórico de enriquecimento
+
+Na tela **Clientes**, ao lado do botão de enriquecer, o link **Histórico** abre
+quem rodou, quando, quantos clientes foram pedidos, quantos voltaram com dado e
+quantos créditos saíram.
+
+Quem registra é o próprio CRM, não o n8n: o enriquecimento é síncrono, então a
+tela já tem o resultado na mão. Tentativa que volta vazia também é registrada —
+é ela que explica crédito gasto sem resultado visível.
+
+Rode `supabase/enrich-log-schema.sql`. A tabela não aceita update nem delete:
+histórico de consumo não se reescreve.
+
 ## Clientes e lojas
 
 Menu **Clientes e lojas**, só para master. Dois níveis:

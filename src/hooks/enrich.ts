@@ -24,3 +24,48 @@ export async function enrichCustomers(
     return { ok: false, error: 'Não foi possível falar com o serviço de enriquecimento.' }
   }
 }
+
+
+/* ---------------------------------------------------------------------------
+ * Histórico de enriquecimentos.
+ *
+ * Quem registra é a própria tela, porque o enriquecimento é síncrono: ela
+ * chama o fluxo e recebe o resultado na mesma requisição. A importação de
+ * NF-e precisa do n8n para isso justamente por ser o contrário.
+ * ------------------------------------------------------------------------- */
+
+export interface EnrichRun {
+  id: string
+  email: string | null
+  solicitados: number
+  enriquecidos: number
+  creditos_gastos: number
+  status: 'concluido' | 'erro' | string
+  erro: string | null
+  created_at: string
+}
+
+/** Grava a corrida. Nunca lança: falhar o registro não pode derrubar a tela. */
+export async function registrarEnriquecimento(input: {
+  clientId: string
+  solicitados: number
+  enriquecidos: number
+  erro?: string | null
+}): Promise<void> {
+  try {
+    const { data } = await supabase.auth.getSession()
+    const userId = data.session?.user.id
+    if (!userId) return
+    await supabase.from('enrich_runs').insert({
+      client_id: input.clientId,
+      user_id: userId,
+      solicitados: input.solicitados,
+      enriquecidos: input.enriquecidos,
+      creditos_gastos: input.enriquecidos,
+      status: input.erro ? 'erro' : 'concluido',
+      erro: input.erro ?? null,
+    })
+  } catch {
+    // histórico é registro, não operação: o enriquecimento já aconteceu
+  }
+}

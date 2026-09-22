@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import type { EnrichRun } from './enrich'
 import { fetchAllRows } from '../lib/fetchAll'
 import { isCancelledStatus } from '../lib/format'
 import { useCompany } from '../context/CompanyContext'
@@ -552,6 +553,24 @@ export function useStoreVolumes(storeIds: string[]) {
         }),
       )
       return Object.fromEntries(counts) as Record<string, number>
+    },
+  })
+}
+
+
+/** Histórico de enriquecimentos da loja ativa. */
+export function useEnrichRuns(limit = 30) {
+  const { activeClient } = useCompany()
+  return useQuery({
+    queryKey: ['enrich-runs', activeClient?.id, limit],
+    enabled: Boolean(activeClient),
+    queryFn: async (): Promise<EnrichRun[]> => {
+      const { data, error } = await supabase.rpc('crm_enrich_runs', {
+        p_client_id: activeClient!.id,
+        p_limit: limit,
+      })
+      if (error) throw new Error(error.message)
+      return (data ?? []) as EnrichRun[]
     },
   })
 }
