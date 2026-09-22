@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { Loader2, Plus, QrCode, Smartphone, Trash2, Unplug } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Loader2, Plus, QrCode, RefreshCw, Smartphone, Trash2, Unplug } from 'lucide-react'
 import {
   STATUS_HINT,
   STATUS_LABEL,
@@ -23,6 +23,35 @@ function CartaoInstancia({ i }: { i: WaInstance }) {
   const [paircode, setPaircode] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
+  const [conectouAgora, setConectouAgora] = useState(false)
+
+  // As funções vêm novas a cada render; guardar a última num ref evita
+  // recriar os intervalos abaixo a cada ciclo.
+  const acoesRef = useRef(acoes)
+  acoesRef.current = acoes
+
+  const conectando = i.status === 'connecting' || i.status === 'creating'
+
+  // Quem sabe se o celular já leu o QR é a uazapi, e só a ação "status" vai
+  // perguntar. Sem isto a tela ficaria em "aguardando leitura" para sempre,
+  // mesmo com o aparelho já pareado.
+  useEffect(() => {
+    if (!conectando) return
+    const t = setInterval(() => void acoesRef.current.atualizarStatus(i.id), 5_000)
+    return () => clearInterval(t)
+  }, [conectando, i.id])
+
+  // Um aviso de que acabou de conectar — o cartão sozinho muda discreto demais
+  const statusAnterior = useRef(i.status)
+  useEffect(() => {
+    if (statusAnterior.current !== 'connected' && i.status === 'connected') {
+      setConectouAgora(true)
+      const t = setTimeout(() => setConectouAgora(false), 8_000)
+      statusAnterior.current = i.status
+      return () => clearTimeout(t)
+    }
+    statusAnterior.current = i.status
+  }, [i.status])
 
   // O QR expira em segundos. Enquanto estiver conectando, pede um novo a cada
   // 30s — sem isso o usuário lê um código morto e nada acontece.
@@ -131,6 +160,20 @@ function CartaoInstancia({ i }: { i: WaInstance }) {
           )}
           <button
             type="button"
+            className="btn-secondary"
+            onClick={() => void rodar('status', () => acoes.atualizarStatus(i.id))}
+            disabled={ocupado !== null}
+            title="Perguntar o estado à uazapi agora"
+          >
+            {ocupado === 'status' ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <RefreshCw className="h-4 w-4" aria-hidden />
+            )}
+            Conferir
+          </button>
+          <button
+            type="button"
             className="inline-flex items-center justify-center rounded-md border border-gray-300 p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
             onClick={() => void deletar()}
             disabled={ocupado !== null}
@@ -141,6 +184,12 @@ function CartaoInstancia({ i }: { i: WaInstance }) {
           </button>
         </div>
       </div>
+
+      {conectouAgora && (
+        <p className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          Número conectado. As campanhas já podem sair por ele.
+        </p>
+      )}
 
       {erro && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>}
 
@@ -244,6 +293,21 @@ function NovaInstancia({ podeCriar, limite }: { podeCriar: boolean; limite: numb
 export default function WhatsApp() {
   const { data: instancias, isLoading, error } = useWaInstances()
   const { data: quota } = useWaQuota()
+  const acoes = useWaActions()
+
+  // O status guardado envelhece: se o número cair de madrugada, a tabela
+  // continua dizendo "conectado" até alguém perguntar. Ao abrir a tela,
+  // pergunta uma vez por instância — depois disso só o polling de quem está
+  // conectando, ou o botão Conferir.
+  const jaConferiu = useRef(false)
+  useEffect(() => {
+    if (jaConferiu.current || !instancias || instancias.length === 0) return
+    jaConferiu.current = true
+    for (const i of instancias) {
+      if (i.status !== 'creating') void acoes.atualizarStatus(i.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instancias])
 
   return (
     <div>
