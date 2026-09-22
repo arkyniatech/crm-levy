@@ -10,7 +10,24 @@ import {
   type WaInstance,
 } from '../hooks/waInstances'
 import { formatPhone } from '../lib/format'
+import { useCompany } from '../context/CompanyContext'
 import { EmptyState, ErrorState, PageHeader, StatusBadge } from '../components/ui'
+
+/**
+ * Como o nome vai aparecer no painel da uazapi. Tem que ser igual ao que o
+ * fluxo n8n monta — se um mudar, o outro muda junto.
+ */
+function nomeNaUazapi(label: string, clientId: string): string {
+  const slug =
+    label
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 24) || 'instancia'
+  return `${slug}-${clientId.slice(0, 8)}`
+}
 
 /** O QR da uazapi vem em base64 ou já como data URI; a tela aceita os dois. */
 function qrSrc(qr: string): string {
@@ -233,7 +250,16 @@ function CartaoInstancia({ i }: { i: WaInstance }) {
   )
 }
 
-function NovaInstancia({ podeCriar, limite }: { podeCriar: boolean; limite: number }) {
+function NovaInstancia({
+  podeCriar,
+  limite,
+  usados,
+}: {
+  podeCriar: boolean
+  limite: number
+  usados: string[]
+}) {
+  const { activeClient } = useCompany()
   const acoes = useWaActions()
   const [aberto, setAberto] = useState(false)
   const [label, setLabel] = useState('')
@@ -243,12 +269,19 @@ function NovaInstancia({ podeCriar, limite }: { podeCriar: boolean; limite: numb
   const criar = async (e: FormEvent) => {
     e.preventDefault()
     setErro(null)
-    if (!label.trim()) {
+    const nome = label.trim()
+    if (!nome) {
       setErro('Dê um nome para identificar este número.')
       return
     }
+    // O nome vira o identificador na uazapi, que é único na conta inteira —
+    // dois iguais na mesma loja gerariam o mesmo e a criação falharia lá.
+    if (usados.some((u) => u.toLowerCase() === nome.toLowerCase())) {
+      setErro('Já existe um número com esse nome nesta loja. Escolha outro.')
+      return
+    }
     setCriando(true)
-    const r = await acoes.criar(label.trim())
+    const r = await acoes.criar(nome)
     setCriando(false)
     if (!r.ok) {
       setErro(r.error ?? 'Falha ao criar a instância.')
@@ -295,6 +328,14 @@ function NovaInstancia({ podeCriar, limite }: { podeCriar: boolean; limite: numb
         Cancelar
       </button>
       {erro && <span className="text-sm text-red-700">{erro}</span>}
+      {label.trim() && activeClient && !erro && (
+        <span className="text-xs text-gray-500">
+          Na uazapi:{' '}
+          <code className="rounded bg-gray-100 px-1.5 py-0.5">
+            {nomeNaUazapi(label.trim(), activeClient.id)}
+          </code>
+        </span>
+      )}
     </form>
   )
 }
@@ -324,7 +365,11 @@ export default function WhatsApp() {
         title="WhatsApp"
         subtitle="Conecte o número que vai disparar as campanhas, lendo um QR Code"
       >
-        <NovaInstancia podeCriar={quota?.pode_criar ?? false} limite={quota?.limite ?? 1} />
+        <NovaInstancia
+          podeCriar={quota?.pode_criar ?? false}
+          limite={quota?.limite ?? 1}
+          usados={(instancias ?? []).map((i) => i.label ?? i.instance_name)}
+        />
       </PageHeader>
 
       {error && <ErrorState message={(error as Error).message} />}

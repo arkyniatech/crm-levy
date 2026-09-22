@@ -92,8 +92,13 @@ desconecta o WhatsApp dele.
 1. Checar a cota: `select * from public.crm_wa_instance_quota('<client_id>')`.
    Se `pode_criar` for falso, responder
    `{ ok:false, error:"Limite de instâncias atingido." }`.
-2. Montar um `instance_name` único na conta uazapi — sugestão:
-   `unificca-<8 primeiros do client_id>-<timestamp>`.
+2. Montar o `instance_name` a partir do rótulo que a pessoa digitou no CRM,
+   em slug, com os 8 primeiros caracteres do `client_id` como sufixo — por
+   exemplo, "Vendas São Paulo" na loja `677c58eb…` vira
+   `vendas-sao-paulo-677c58eb`. O rótulo é o que se lê no painel da uazapi; o
+   sufixo existe porque lá o nome é único na conta inteira, e duas lojas
+   poderiam querer "vendas". A tela mostra o nome resultante antes de criar e
+   recusa rótulo repetido na mesma loja.
 3. `POST {base}/instance/create` com header `admintoken` e body
    `{ "name": "<instance_name>" }`. A resposta traz o **token da instância**.
 4. Gravar em duas tabelas:

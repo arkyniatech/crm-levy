@@ -283,7 +283,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ name: 'unificca-' + String($('Contexto').first().json.client_id).slice(0,8) + '-' + Date.now() }) }}"
+        "jsonBody": "={{ (function(){\n  const ctx = $('Contexto').first().json;\n  // Nome legível no painel da uazapi, a partir do que a pessoa digitou.\n  // O sufixo com o começo do client_id existe porque lá o nome é único na\n  // conta inteira: duas lojas poderiam querer \"vendas\".\n  const slug = String(ctx.label || 'instancia')\n    .toLowerCase()\n    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '')\n    .slice(0, 24) || 'instancia';\n  return JSON.stringify({ name: slug + '-' + String(ctx.client_id).slice(0, 8) });\n})() }}"
       },
       "id": "wa-11",
       "name": "uazapi criar",
@@ -294,7 +294,7 @@
         120
       ],
       "onError": "continueRegularOutput",
-      "notes": "Usa o admintoken da uazapi (credencial arkynia-uazapi).",
+      "notes": "Usa o admintoken da uazapi (credencial arkynia-uazapi). O nome da instância sai do rótulo digitado no CRM, para bater com o que aparece lá.",
       "credentials": {
         "httpHeaderAuth": {
           "id": "DJIqxZLTo4wPJA82",
