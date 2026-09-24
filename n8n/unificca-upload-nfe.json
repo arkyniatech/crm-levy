@@ -1,0 +1,989 @@
+{
+  "name": "NFe - Upload ZIP em Lote (Contatta)",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Upload de NF-e em lote (ZIP) — Contatta",
+        "formDescription": "Envie o .zip principal. O fluxo abre pastas e ZIPs aninhados até achar os XMLs.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Arquivo ZIP principal",
+              "fieldType": "file",
+              "fieldName": "data",
+              "multipleFiles": false,
+              "acceptFileTypes": ".zip",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "buttonLabel": "Enviar",
+          "path": "upload-nfe-zip-levy"
+        }
+      },
+      "id": "nfe-00",
+      "name": "Upload ZIP de NFes",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -560,
+        0
+      ],
+      "webhookId": "a639f898-2d4d-4518-a665-6de31ae91cc9"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "unificca-upload-nfe",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "id": "nfe-01",
+      "name": "Webhook Upload CRM",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -560,
+        420
+      ],
+      "webhookId": "fe762c10-ce24-488e-8f9c-ed7a5c9ff036"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://lopdvdblwasuowjdokpo.supabase.co/auth/v1/user",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxvcGR2ZGJsd2FzdW93amRva3BvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NjI3ODAsImV4cCI6MjA3ODUzODc4MH0.Vhv0sGU7DCf-nCeMLwk9aX_wunq8OugSKaF0IYgwmb0"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ $json.headers.authorization }}"
+            }
+          ]
+        }
+      },
+      "id": "nfe-02",
+      "name": "Validar token do CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -340,
+        420
+      ],
+      "onError": "continueErrorOutput",
+      "notes": "A apikey é a chave anon, que é pública. Valida que o upload veio de usuário logado."
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Pega os binários do webhook e normaliza mimeType: navegador e curl mandam\n// octet-stream, e o nó de descompactação ignora o que não está marcado como zip.\nconst src = $('Webhook Upload CRM').first();\nconst bin = src.binary || {};\nconst out = [];\nfor (const k of Object.keys(bin)) {\n  const meta = Object.assign({}, bin[k]);\n  const name = (meta.fileName || k || '');\n  const lower = name.toLowerCase();\n  let kind = null;\n  if (lower.endsWith('.xml')) { kind = 'xml'; meta.mimeType = 'application/xml'; meta.fileExtension = 'xml'; }\n  else if (lower.endsWith('.zip')) { kind = 'zip'; meta.mimeType = 'application/zip'; meta.fileExtension = 'zip'; }\n  else continue;\n  out.push({ json: { kind: kind, entry_path: name }, binary: { data: meta } });\n}\nif (out.length === 0) return [{ json: { kind: 'invalido' } }];\nreturn out;\n"
+      },
+      "id": "nfe-03",
+      "name": "Separar arquivos do upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "zip",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "xml",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "nfe-04",
+      "name": "Tipo de arquivo?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        100,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: \"Não autorizado. Faça login no CRM e tente de novo.\" }) }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "nfe-05",
+      "name": "Responder 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -120,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: \"Formato não suportado. Envie um .zip ou .xml.\" }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "nfe-06",
+      "name": "Responder 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        320,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "outputPrefix": "l1_"
+      },
+      "id": "nfe-07",
+      "name": "Descompactar ZIP (nivel 1)",
+      "type": "n8n-nodes-base.compression",
+      "typeVersion": 1.1,
+      "position": [
+        -340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst input = $input.all();\nconst out = [];\nfor (const item of input) {\n  const bin = item.binary || {};\n  for (const k of Object.keys(bin)) {\n    const meta = bin[k];\n    const name = (meta.fileName || k || '');\n    const lower = name.toLowerCase();\n    if (lower.includes('__macosx')) continue;\n    if (lower.endsWith('/')) continue;\n    let kind = null;\n    if (lower.endsWith('.xml')) kind = 'xml';\n    else if (lower.endsWith('.zip')) kind = 'zip';\n    else continue;\n    out.push({ json: { kind: kind, entry_path: name }, binary: { data: meta } });\n  }\n}\nreturn out;\n"
+      },
+      "id": "nfe-08",
+      "name": "Classificar arquivos (nivel 1)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "zip",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "nfe-09",
+      "name": "E ZIP aninhado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "outputPrefix": "l2_"
+      },
+      "id": "nfe-10",
+      "name": "Descompactar ZIP (nivel 2)",
+      "type": "n8n-nodes-base.compression",
+      "typeVersion": 1.1,
+      "position": [
+        320,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst input = $input.all();\nconst out = [];\nfor (const item of input) {\n  const bin = item.binary || {};\n  for (const k of Object.keys(bin)) {\n    const meta = bin[k];\n    const name = (meta.fileName || k || '');\n    const lower = name.toLowerCase();\n    if (lower.includes('__macosx')) continue;\n    if (lower.endsWith('/')) continue;\n    let kind = null;\n    if (lower.endsWith('.xml')) kind = 'xml';\n    else if (lower.endsWith('.zip')) kind = 'zip';\n    else continue;\n    out.push({ json: { kind: kind, entry_path: name }, binary: { data: meta } });\n  }\n}\nreturn out;\n"
+      },
+      "id": "nfe-11",
+      "name": "Classificar arquivos (nivel 2)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.kind }}",
+              "rightValue": "zip",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "nfe-12",
+      "name": "Ainda tem ZIP (nivel 3)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        760,
+        -140
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "nfe-13",
+      "name": "Nao processados (nivel 3+)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        980,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "nfe-14",
+      "name": "Combinar XMLs finais",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        980,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "xml",
+        "destinationKey": "xml_text",
+        "options": {}
+      },
+      "id": "nfe-15",
+      "name": "Extrair texto do XML",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        120
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "dataPropertyName": "xml_text",
+        "options": {
+          "trim": true
+        }
+      },
+      "id": "nfe-16",
+      "name": "Converter XML para JSON",
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        1420,
+        120
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\nconst out = [];\nfor (const item of items) {\n  const j = item.json;\n  const root = j.nfeProc || j.NFe || j;\n  const nfe = root.NFe || root;\n  const inf = nfe.infNFe || nfe;\n  const ide = inf.ide || {};\n  const dest = inf.dest || {};\n  const ender = dest.enderDest || {};\n  const total = (inf.total && inf.total.ICMSTot) || {};\n  const detRaw = inf.det || [];\n  const det = Array.isArray(detRaw) ? detRaw : [detRaw];\n  const chaveRaw = inf.Id || (inf.$ && inf.$.Id) || '';\n  const chave = String(chaveRaw).replace(/^NFe/, '');\n  const itensOut = det.map(function (d) {\n    const p = d.prod || {};\n    return {\n      external_item_id: String(p.cProd || ''), sku: p.cProd || '',\n      product_name: p.xProd || '', quantity: Number(p.qCom || 0),\n      unit_price: Number(p.vUnCom || 0), total_price: Number(p.vProd || 0),\n      order_ref: p.xPed || '', order_item_ref: p.nItemPed || ''\n    };\n  });\n  out.push({ json: {\n    chave_acesso: chave, numero_nf: ide.nNF || '',\n    data_emissao: ide.dhEmi || ide.dEmi || '',\n    buyer_name: dest.xNome || '', buyer_cpf: dest.CPF || '', buyer_cnpj: dest.CNPJ || '',\n    buyer_email: dest.email || '', buyer_phone: dest.fone || '',\n    address: { logradouro: ender.xLgr || '', numero: ender.nro || '', bairro: ender.xBairro || '',\n               cidade: ender.xMun || '', uf: ender.UF || '', cep: ender.CEP || '' },\n    valor_total_nf: Number(total.vNF || 0),\n    order_ref_provavel: (itensOut[0] && itensOut[0].order_ref) || '',\n    itens: itensOut, raw_nfe: inf\n  } });\n}\nreturn out;\n"
+      },
+      "id": "nfe-17",
+      "name": "Extrair dados da NFe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        120
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, status: \"processando\", total_nfes: $('Extrair dados da NFe').all().length }) }}",
+        "options": {}
+      },
+      "id": "nfe-18",
+      "name": "Responder recebido",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1860,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst MP_BY_CNPJ = { '35635824000112': 'shopee', '03361252000134': 'mercado_livre' };\nfunction digits(s){ return String(s == null ? '' : s).replace(/[^0-9]/g, ''); }\nconst RUN = $now.toISO();\nlet CID = '677c58eb-b3ec-493a-ad14-0d052d7d8a45';\ntry { CID = ($('Webhook Upload CRM').first().json.body || {}).client_id || CID; } catch (e) {}\n\nreturn $input.all().map(function (it) {\n  const j = it.json;\n  const cpf = digits(j.buyer_cpf);\n  const addr = j.address || {};\n  const nfe = j.raw_nfe || {};\n  const inter = nfe.infIntermed || {};\n  const emit = nfe.emit || {};\n  const handle = String(inter.idCadIntTran || '').trim();\n  const mp = MP_BY_CNPJ[digits(inter.CNPJ)] || 'shopee';\n  const mpLabel = mp === 'shopee' ? 'Shopee' : (mp === 'mercado_livre' ? 'Mercado Livre' : mp);\n  const shopId = handle || ('emit:' + digits(emit.CNPJ));\n  const orderRef = String(j.order_ref_provavel || '').trim() || String(j.chave_acesso || '');\n  return { json: Object.assign({}, j, {\n    _run: RUN, client_id: CID,\n    cpf_limpo: cpf.length === 11 ? cpf : '',\n    order_ref: orderRef, _city: addr.cidade || null, _uf: addr.uf || null,\n    mp: mp, shop_id: shopId, shop_name: mpLabel + ' · ' + shopId,\n    ordered_at: j.data_emissao || null,\n    total_amount: Number(j.valor_total_nf || 0),\n    ship_address: j.address || null\n  }) };\n});\n"
+      },
+      "id": "nfe-19",
+      "name": "Preparar persistencia",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Junta as notas em um item só. Daqui para a frente cada gravação é UMA\n// requisição com um array, em vez de uma por nota — era isso que fazia a\n// importação levar minutos.\nconst notas = $input.all().map(function (i) { return i.json; });\nif (notas.length === 0) return [{ json: { vazio: true, lojas: [], clientes: [], notas: [] } }];\n\nconst run = notas[0]._run;\nconst cid = notas[0].client_id;\n\nconst lojas = {};\nfor (const n of notas) {\n  const k = n.mp + '|' + n.shop_id;\n  if (!lojas[k]) lojas[k] = { client_id: cid, marketplace: n.mp, name: n.shop_name,\n                              external_shop_id: n.shop_id, updated_at: run };\n}\n\n// Mesmo CPF em várias notas do lote vira uma linha só: mandar repetido no\n// array faz o upsert do PostgREST recusar (\"cannot affect row a second time\").\nconst clientes = {};\nfor (const n of notas) {\n  if (!n.cpf_limpo) continue;\n  const c = clientes[n.cpf_limpo] || { client_id: cid, cpf: n.cpf_limpo, updated_at: run };\n  if (n.buyer_name) c.name = n.buyer_name;\n  if (n._city) c.city = n._city;\n  if (n._uf) c.state = n._uf;\n  if (n.buyer_email) c.email = n.buyer_email;\n  if (n.buyer_phone) c.phone = n.buyer_phone;\n  clientes[n.cpf_limpo] = c;\n}\n\nreturn [{ json: { vazio: false, run: run, client_id: cid,\n  lojas: Object.values(lojas), clientes: Object.values(clientes), notas: notas } }];\n"
+      },
+      "id": "nfe-20",
+      "name": "Montar lotes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lopdvdblwasuowjdokpo.supabase.co/rest/v1/stores?on_conflict=marketplace,external_shop_id",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.lojas) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        }
+      },
+      "id": "nfe-21",
+      "name": "Upsert lojas (lote)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2300,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "supabaseApi": {
+          "id": "PInceeL9GkpLm81V",
+          "name": "crm-levy"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lopdvdblwasuowjdokpo.supabase.co/rest/v1/customers?on_conflict=client_id,cpf",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Montar lotes').first().json.clientes) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        }
+      },
+      "id": "nfe-22",
+      "name": "Upsert clientes (lote)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2520,
+        300
+      ],
+      "notes": "O corpo vem de 'Montar lotes' porque a entrada deste nó são as lojas gravadas.",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "supabaseApi": {
+          "id": "PInceeL9GkpLm81V",
+          "name": "crm-levy"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Cruza o que voltou das duas gravações anteriores para montar os pedidos.\nconst lote = $('Montar lotes').first().json;\nif (lote.vazio) return [{ json: { pedidos: [] } }];\n\nconst porLoja = {};\nfor (const i of $('Upsert lojas (lote)').all()) {\n  const s = i.json;\n  if (s && s.id && s.external_shop_id) porLoja[s.marketplace + '|' + s.external_shop_id] = s.id;\n}\nconst porCpf = {};\nfor (const i of $input.all()) {\n  const c = i.json;\n  if (c && c.id && c.cpf) porCpf[c.cpf] = { id: c.id, created_at: c.created_at };\n}\n\n// Duas notas com o mesmo xPed na mesma loja colidiriam dentro do próprio\n// array, e o PostgREST recusa o lote inteiro com \"cannot affect row a second\n// time\". Aqui a última vence, como aconteceria em chamadas separadas.\nconst porChave = {};\nfor (const n of lote.notas) {\n  if (!n.cpf_limpo) continue;              // nota sem CPF não vira pedido\n  const storeId = porLoja[n.mp + '|' + n.shop_id];\n  const cli = porCpf[n.cpf_limpo];\n  if (!storeId || !cli) continue;\n  porChave[storeId + '|' + n.order_ref] = {\n    store_id: storeId, customer_id: cli.id, marketplace: n.mp,\n    external_order_id: n.order_ref, status: 'importado_nfe',\n    total_amount: n.total_amount, currency: 'BRL',\n    buyer_cpf: n.cpf_limpo, buyer_name: n.buyer_name || null,\n    buyer_email: n.buyer_email || null, buyer_phone: n.buyer_phone || null,\n    ship_address: n.ship_address, ordered_at: n.ordered_at, updated_at: lote.run\n  };\n}\nreturn [{ json: { pedidos: Object.values(porChave) } }];\n"
+      },
+      "id": "nfe-23",
+      "name": "Montar pedidos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2740,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lopdvdblwasuowjdokpo.supabase.co/rest/v1/orders?on_conflict=store_id,external_order_id",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.pedidos) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        }
+      },
+      "id": "nfe-24",
+      "name": "Upsert pedidos (lote)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2960,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "supabaseApi": {
+          "id": "PInceeL9GkpLm81V",
+          "name": "crm-levy"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst lote = $('Montar lotes').first().json;\nconst porRef = {};\nfor (const i of $input.all()) {\n  const o = i.json;\n  if (o && o.id && o.external_order_id) porRef[o.store_id + '|' + o.external_order_id] = o.id;\n}\nconst porLoja = {};\nfor (const i of $('Upsert lojas (lote)').all()) {\n  const s = i.json;\n  if (s && s.id && s.external_shop_id) porLoja[s.marketplace + '|' + s.external_shop_id] = s.id;\n}\n\nconst itens = [];\nconst estoque = [];\nfor (const n of (lote.notas || [])) {\n  const storeId = porLoja[n.mp + '|' + n.shop_id];\n  const orderId = storeId ? porRef[storeId + '|' + n.order_ref] : null;\n  if (orderId) {\n    for (const it of (n.itens || [])) {\n      itens.push({ order_id: orderId, external_item_id: it.external_item_id || null,\n        sku: it.sku || null, product_name: it.product_name || null,\n        quantity: it.quantity || 1,\n        unit_price: it.unit_price === undefined ? null : it.unit_price,\n        total_price: it.total_price === undefined ? null : it.total_price });\n    }\n  }\n  // a chave de acesso é o identificador da nota para o estoque: número de NF\n  // se repete entre emitentes diferentes\n  estoque.push({ ref: n.chave_acesso || n.numero_nf || '',\n                 items: (n.itens || []).map(function (it) { return { sku: it.sku, qty: it.quantity }; }) });\n}\nreturn [{ json: { itens: itens, estoque: estoque, client_id: lote.client_id } }];\n"
+      },
+      "id": "nfe-25",
+      "name": "Montar itens",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3180,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lopdvdblwasuowjdokpo.supabase.co/rest/v1/rpc/crm_replace_order_items",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_items: $json.itens }) }}"
+      },
+      "id": "nfe-26",
+      "name": "Substituir itens (lote)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3400,
+        300
+      ],
+      "notes": "Delete e insert na mesma transação, do lado do banco: em lote, a URL de um DELETE com todos os uuids passaria de 30 KB.",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "supabaseApi": {
+          "id": "PInceeL9GkpLm81V",
+          "name": "crm-levy"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lopdvdblwasuowjdokpo.supabase.co/rest/v1/rpc/deduct_stock_for_nfes",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (function(){\n  let baixar = true;\n  try { baixar = String(($('Webhook Upload CRM').first().json.body || {}).deduct_stock) !== 'false'; } catch (e) {}\n  const m = $('Montar itens').first().json;\n  return JSON.stringify({ p_client: m.client_id, p_notas: baixar ? m.estoque : [] });\n})() }}"
+      },
+      "id": "nfe-27",
+      "name": "Baixar estoque (lote)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3620,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "supabaseApi": {
+          "id": "PInceeL9GkpLm81V",
+          "name": "crm-levy"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nlet viaWebhook = false;\ntry { viaWebhook = $('Webhook Upload CRM').isExecuted === true; } catch (e) {}\n\nconst lote = $('Montar lotes').first().json;\nconst notas = (lote.notas || []).map(function (n) {\n  return { chave_acesso: n.chave_acesso || '', numero_nf: n.numero_nf || '',\n           data_emissao: n.data_emissao || '', buyer_name: n.buyer_name || '',\n           buyer_cpf: n.buyer_cpf || '', valor_total_nf: Number(n.valor_total_nf || 0),\n           order_ref: n.order_ref || '', itens: (n.itens || []).length };\n});\n\nconst run = new Date(lote.run || Date.now()).getTime() - 60000;\nfunction contar(no) {\n  let novos = 0, antigos = 0;\n  try {\n    $(no).all().forEach(function (i) {\n      const d = i.json;\n      if (!d || !d.id || !d.created_at) return;\n      if (new Date(d.created_at).getTime() >= run) novos++; else antigos++;\n    });\n  } catch (e) {}\n  return { novos: novos, antigos: antigos };\n}\nconst pedidos = contar('Upsert pedidos (lote)');\nconst clientes = contar('Upsert clientes (lote)');\n\nconst semCpf = (lote.notas || []).filter(function (n) { return !n.cpf_limpo; }).length;\nlet estoqueBaixado = 0, semProduto = 0;\ntry {\n  const e = $('Baixar estoque (lote)').first().json || {};\n  estoqueBaixado = Number(e.deducted || 0);\n  if (Array.isArray(e.unknown)) semProduto = e.unknown.length;\n} catch (e) {}\n\nconst datas = notas.map(function (n) { return n.data_emissao; }).filter(Boolean).sort();\n\nreturn [{ json: {\n  ok: true, via_webhook: viaWebhook, client_id: lote.client_id,\n  total_nfes: notas.length, com_cpf: notas.length - semCpf, sem_cpf: semCpf,\n  novos_pedidos: pedidos.novos, pedidos_atualizados: pedidos.antigos,\n  novos_clientes: clientes.novos,\n  nota_de: datas[0] || null, nota_ate: datas[datas.length - 1] || null,\n  estoque_baixado: estoqueBaixado, itens_sem_produto: semProduto,\n  valor_total: notas.reduce(function (s, n) { return s + n.valor_total_nf; }, 0),\n  notas: notas\n} }];\n"
+      },
+      "id": "nfe-28",
+      "name": "Montar resumo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3840,
+        300
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lopdvdblwasuowjdokpo.supabase.co/rest/v1/nfe_imports",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (function(){\n  let uid = null;\n  try { uid = ($('Validar token do CRM').first().json || {}).id || null; } catch (e) {}\n  const r = $json;\n  return JSON.stringify({\n    client_id: r.client_id, user_id: uid, status: 'concluido',\n    total_nfes: r.total_nfes, novos_pedidos: r.novos_pedidos,\n    pedidos_atualizados: r.pedidos_atualizados, novos_clientes: r.novos_clientes,\n    sem_cpf: r.sem_cpf, nota_de: r.nota_de, nota_ate: r.nota_ate,\n    finished_at: new Date().toISOString()\n  });\n})() }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        }
+      },
+      "id": "nfe-29",
+      "name": "Registrar importacao",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4060,
+        160
+      ],
+      "notes": "Alimenta a aba Histórico e dispara o débito do saldo de notas.",
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "supabaseApi": {
+          "id": "PInceeL9GkpLm81V",
+          "name": "crm-levy"
+        }
+      },
+      "alwaysOutputData": true
+    }
+  ],
+  "connections": {
+    "Webhook Upload CRM": {
+      "main": [
+        [
+          {
+            "node": "Validar token do CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar token do CRM": {
+      "main": [
+        [
+          {
+            "node": "Separar arquivos do upload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar arquivos do upload": {
+      "main": [
+        [
+          {
+            "node": "Tipo de arquivo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tipo de arquivo?": {
+      "main": [
+        [
+          {
+            "node": "Descompactar ZIP (nivel 1)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Combinar XMLs finais",
+            "type": "main",
+            "index": 2
+          }
+        ],
+        [
+          {
+            "node": "Responder 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload ZIP de NFes": {
+      "main": [
+        [
+          {
+            "node": "Descompactar ZIP (nivel 1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descompactar ZIP (nivel 1)": {
+      "main": [
+        [
+          {
+            "node": "Classificar arquivos (nivel 1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classificar arquivos (nivel 1)": {
+      "main": [
+        [
+          {
+            "node": "E ZIP aninhado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E ZIP aninhado?": {
+      "main": [
+        [
+          {
+            "node": "Descompactar ZIP (nivel 2)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Combinar XMLs finais",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descompactar ZIP (nivel 2)": {
+      "main": [
+        [
+          {
+            "node": "Classificar arquivos (nivel 2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classificar arquivos (nivel 2)": {
+      "main": [
+        [
+          {
+            "node": "Ainda tem ZIP (nivel 3)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ainda tem ZIP (nivel 3)?": {
+      "main": [
+        [
+          {
+            "node": "Nao processados (nivel 3+)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Combinar XMLs finais",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combinar XMLs finais": {
+      "main": [
+        [
+          {
+            "node": "Extrair texto do XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair texto do XML": {
+      "main": [
+        [
+          {
+            "node": "Converter XML para JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Converter XML para JSON": {
+      "main": [
+        [
+          {
+            "node": "Extrair dados da NFe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair dados da NFe": {
+      "main": [
+        [
+          {
+            "node": "Responder recebido",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Preparar persistencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar persistencia": {
+      "main": [
+        [
+          {
+            "node": "Montar lotes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar lotes": {
+      "main": [
+        [
+          {
+            "node": "Upsert lojas (lote)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert lojas (lote)": {
+      "main": [
+        [
+          {
+            "node": "Upsert clientes (lote)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert clientes (lote)": {
+      "main": [
+        [
+          {
+            "node": "Montar pedidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar pedidos": {
+      "main": [
+        [
+          {
+            "node": "Upsert pedidos (lote)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert pedidos (lote)": {
+      "main": [
+        [
+          {
+            "node": "Montar itens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar itens": {
+      "main": [
+        [
+          {
+            "node": "Substituir itens (lote)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Substituir itens (lote)": {
+      "main": [
+        [
+          {
+            "node": "Baixar estoque (lote)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baixar estoque (lote)": {
+      "main": [
+        [
+          {
+            "node": "Montar resumo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar resumo": {
+      "main": [
+        [
+          {
+            "node": "Registrar importacao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
