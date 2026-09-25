@@ -227,11 +227,10 @@ export function useOutreachStats() {
           .select('id', { count: 'exact', head: true })
           .eq('client_id', clientId)
           .not('extra->>enriched_at', 'is', null),
-        supabase
-          .from('customers')
-          .select('id', { count: 'exact', head: true })
-          .eq('client_id', clientId)
-          .not('phone', 'is', null),
+        // Alcançável de verdade: número que dá para enviar, sem opt-out e sem
+        // repetição. "phone is not null" contava string vazia e número
+        // quebrado, e por isso a Visão Geral e a campanha nunca batiam.
+        supabase.rpc('crm_wa_alcancaveis', { p_client_id: clientId }),
       ])
       for (const res of [totalRes, enrichedRes, phoneRes]) {
         if (res.error) throw new Error(res.error.message)
@@ -271,7 +270,7 @@ export function useOutreachStats() {
       return {
         total: totalRes.count ?? 0,
         enriched: enrichedRes.count ?? 0,
-        withPhone: phoneRes.count ?? 0,
+        withPhone: Number(phoneRes.data) || 0,
         campaigns,
         messagesSent,
         delivered,

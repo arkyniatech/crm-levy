@@ -101,7 +101,7 @@ export default function Dashboard() {
         <div className="card p-4">
           <div className="flex items-center gap-2 text-gray-500">
             <Sparkles className="h-4 w-4" aria-hidden />
-            <span className="text-xs font-medium uppercase tracking-wide">Enriquecidos</span>
+            <span className="text-xs font-medium uppercase tracking-wide">CPFs consultados</span>
           </div>
           <p className="mt-2 font-display text-2xl font-semibold tabular-nums text-gray-900">
             {stats ? `${enrichedPct}%` : '…'}
@@ -112,12 +112,15 @@ export default function Dashboard() {
           <p className="mt-1 text-xs text-gray-500">
             {stats?.enriched ?? 0} de {stats?.total ?? 0} clientes
           </p>
+          <p className="mt-1 text-xs text-gray-400">
+            consulta feita — boa parte volta sem telefone
+          </p>
         </div>
         <Kpi
           icon={Phone}
-          label="Com telefone"
+          label="Alcançáveis no WhatsApp"
           value={stats ? String(stats.withPhone) : '…'}
-          hint="prontos para WhatsApp"
+          hint="número válido, sem opt-out e sem repetir"
         />
         <Kpi icon={Megaphone} label="Campanhas" value={stats ? String(stats.campaigns) : '…'} />
         <Kpi
