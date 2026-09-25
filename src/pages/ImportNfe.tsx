@@ -161,6 +161,14 @@ export default function ImportNfe() {
 
   const ocupado = progresso !== null
 
+  // Descompactar e ler XML são síncronos e travam a aba. Sem devolver o
+  // controle ao navegador entre as etapas, nada é pintado e a barra de
+  // progresso só apareceria depois de tudo terminado.
+  const mostrar = async (p: Progresso) => {
+    setProgresso(p)
+    await new Promise((r) => setTimeout(r, 0))
+  }
+
   const handleFile = async (file: File) => {
     setErro(null)
     setResultado(null)
@@ -176,20 +184,17 @@ export default function ImportNfe() {
 
     setFileName(file.name)
     try {
-      setProgresso({ fase: 'Abrindo o arquivo', feito: 0, total: 1 })
+      await mostrar({ fase: 'Abrindo o arquivo', feito: 0, total: 1 })
       const arquivos = await lerArquivo(file)
 
-      setProgresso({ fase: 'Lendo as notas', feito: 0, total: arquivos.length })
+      await mostrar({ fase: 'Lendo as notas', feito: 0, total: arquivos.length })
       const notas = []
       for (let i = 0; i < arquivos.length; i += 1) {
         const nota = lerNota(arquivos[i])
         if (nota) notas.push(nota)
         // Devolve o controle ao navegador de vez em quando, senão a aba
         // congela e a barra de progresso nunca chega a ser desenhada.
-        if (i % 50 === 0) {
-          setProgresso({ fase: 'Lendo as notas', feito: i, total: arquivos.length })
-          await new Promise((r) => setTimeout(r, 0))
-        }
+        if (i % 25 === 0) await mostrar({ fase: 'Lendo as notas', feito: i, total: arquivos.length })
       }
 
       if (notas.length === 0) {

@@ -157,20 +157,31 @@ export async function importarNotas(
   }
 
   // ----------------------------------------------------------------- itens
-  const itens: Record<string, unknown>[] = []
+  // Duas notas podem apontar para o MESMO pedido (mesmo xPed na mesma loja),
+  // e aí os itens das duas caem no mesmo order_id. Existe índice único em
+  // (order_id, external_item_id), então repetir estoura o lote inteiro.
+  // Última nota vence, que é o que acontecia quando cada uma era gravada
+  // separadamente.
+  const itensPorChave = new Map<string, Record<string, unknown>>()
+  const itensSemId: Record<string, unknown>[] = []
   for (const n of notas) {
     const l = lojaDaNota(n)
     const storeId = idPorLoja.get(`${l.marketplace}|${l.shopId}`)
     const orderId = storeId ? idPorPedido.get(`${storeId}|${n.order_ref}`) : undefined
     if (!orderId) continue
     for (const it of n.itens) {
-      itens.push({
+      const linha = {
         order_id: orderId, external_item_id: it.external_item_id || null,
         sku: it.sku || null, product_name: it.product_name || null,
         quantity: it.quantity, unit_price: it.unit_price, total_price: it.total_price,
-      })
+      }
+      // O índice único não alcança linha com external_item_id nulo: no
+      // Postgres, nulos não colidem entre si.
+      if (it.external_item_id) itensPorChave.set(`${orderId}|${it.external_item_id}`, linha)
+      else itensSemId.push(linha)
     }
   }
+  const itens = [...itensPorChave.values(), ...itensSemId]
 
   // Reimportar substitui os itens, não acumula
   const idsPedidos = [...idPorPedido.values()]
