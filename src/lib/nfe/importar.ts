@@ -1,0 +1,249 @@
+import { supabase } from '../supabase'
+import type { NotaLida } from './parse'
+
+/** Quantas linhas por requisição. Acima disso a URL ou o corpo incomodam. */
+const LOTE = 500
+const LOTE_IDS = 150
+
+export interface Progresso {
+  fase: string
+  feito: number
+  total: number
+}
+
+export interface ResultadoImportacao {
+  total_nfes: number
+  sem_cpf: number
+  novos_clientes: number
+  novos_pedidos: number
+  pedidos_atualizados: number
+  nota_de: string | null
+  nota_ate: string | null
+  estoque_baixado: number
+  itens_sem_produto: string[]
+}
+
+const MP_POR_CNPJ: Record<string, string> = {
+  '35635824000112': 'shopee',
+  '03361252000134': 'mercado_livre',
+}
+
+const ROTULO_MP: Record<string, string> = {
+  shopee: 'Shopee',
+  mercado_livre: 'Mercado Livre',
+  tiktok_shop: 'TikTok Shop',
+}
+
+function pedacos<T>(lista: T[], tamanho: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < lista.length; i += tamanho) out.push(lista.slice(i, i + tamanho))
+  return out
+}
+
+function lojaDaNota(n: NotaLida): { marketplace: string; shopId: string; nome: string } {
+  const marketplace = MP_POR_CNPJ[n.inter_cnpj] || 'shopee'
+  const shopId = n.inter_handle.trim() || `emit:${n.emit_cnpj}`
+  return { marketplace, shopId, nome: `${ROTULO_MP[marketplace] ?? marketplace} · ${shopId}` }
+}
+
+/**
+ * Grava as notas lidas, em lote.
+ *
+ * Cada etapa é uma requisição por bloco de 500, não uma por nota — era isso
+ * que fazia a importação levar minutos. O `created_at` que volta de cada
+ * upsert diz o que nasceu agora e o que já existia: upsert que atualiza não
+ * mexe nesse campo.
+ */
+export async function importarNotas(
+  notas: NotaLida[],
+  clientId: string,
+  descontarEstoque: boolean,
+  aoProgredir: (p: Progresso) => void,
+): Promise<ResultadoImportacao> {
+  const inicio = Date.now() - 60_000 // folga para diferença de relógio com o banco
+  const agora = new Date().toISOString()
+
+  // ---------------------------------------------------------------- lojas
+  aoProgredir({ fase: 'Identificando as lojas', feito: 0, total: 1 })
+  const lojasPorChave = new Map<string, { client_id: string; marketplace: string; name: string; external_shop_id: string; updated_at: string }>()
+  for (const n of notas) {
+    const l = lojaDaNota(n)
+    const chave = `${l.marketplace}|${l.shopId}`
+    if (!lojasPorChave.has(chave)) {
+      lojasPorChave.set(chave, {
+        client_id: clientId, marketplace: l.marketplace,
+        name: l.nome, external_shop_id: l.shopId, updated_at: agora,
+      })
+    }
+  }
+  const idPorLoja = new Map<string, string>()
+  for (const bloco of pedacos([...lojasPorChave.values()], LOTE)) {
+    const { data, error } = await supabase
+      .from('stores')
+      .upsert(bloco, { onConflict: 'marketplace,external_shop_id' })
+      .select('id, marketplace, external_shop_id')
+    if (error) throw new Error(`Lojas: ${error.message}`)
+    for (const s of data ?? []) idPorLoja.set(`${s.marketplace}|${s.external_shop_id}`, s.id)
+  }
+
+  // ------------------------------------------------------------- clientes
+  // CPF repetido entre notas vira uma linha só: mandar duplicado no mesmo
+  // array faz o Postgres recusar o lote inteiro.
+  const clientesPorCpf = new Map<string, Record<string, unknown>>()
+  for (const n of notas) {
+    if (n.buyer_cpf.length !== 11) continue
+    const atual = clientesPorCpf.get(n.buyer_cpf) ?? { client_id: clientId, cpf: n.buyer_cpf, updated_at: agora }
+    if (n.buyer_name) atual.name = n.buyer_name
+    if (n.cidade) atual.city = n.cidade
+    if (n.uf) atual.state = n.uf
+    if (n.buyer_email) atual.email = n.buyer_email
+    if (n.buyer_phone) atual.phone = n.buyer_phone
+    clientesPorCpf.set(n.buyer_cpf, atual)
+  }
+
+  const idPorCpf = new Map<string, string>()
+  let novosClientes = 0
+  const blocosCli = pedacos([...clientesPorCpf.values()], LOTE)
+  let feito = 0
+  for (const bloco of blocosCli) {
+    aoProgredir({ fase: 'Gravando clientes', feito, total: clientesPorCpf.size })
+    const { data, error } = await supabase
+      .from('customers')
+      .upsert(bloco, { onConflict: 'client_id,cpf' })
+      .select('id, cpf, created_at')
+    if (error) throw new Error(`Clientes: ${error.message}`)
+    for (const c of data ?? []) {
+      idPorCpf.set(c.cpf as string, c.id as string)
+      if (new Date(c.created_at as string).getTime() >= inicio) novosClientes += 1
+    }
+    feito += bloco.length
+  }
+
+  // --------------------------------------------------------------- pedidos
+  const pedidosPorChave = new Map<string, Record<string, unknown>>()
+  for (const n of notas) {
+    if (n.buyer_cpf.length !== 11) continue
+    const l = lojaDaNota(n)
+    const storeId = idPorLoja.get(`${l.marketplace}|${l.shopId}`)
+    const customerId = idPorCpf.get(n.buyer_cpf)
+    if (!storeId || !customerId) continue
+    pedidosPorChave.set(`${storeId}|${n.order_ref}`, {
+      store_id: storeId, customer_id: customerId, marketplace: l.marketplace,
+      external_order_id: n.order_ref, status: 'importado_nfe',
+      total_amount: n.valor_total, currency: 'BRL',
+      buyer_cpf: n.buyer_cpf, buyer_name: n.buyer_name || null,
+      buyer_email: n.buyer_email || null, buyer_phone: n.buyer_phone || null,
+      ship_address: n.endereco, ordered_at: n.data_emissao, updated_at: agora,
+    })
+  }
+
+  const idPorPedido = new Map<string, string>()
+  let novosPedidos = 0
+  let pedidosAtualizados = 0
+  feito = 0
+  for (const bloco of pedacos([...pedidosPorChave.values()], LOTE)) {
+    aoProgredir({ fase: 'Gravando vendas', feito, total: pedidosPorChave.size })
+    const { data, error } = await supabase
+      .from('orders')
+      .upsert(bloco, { onConflict: 'store_id,external_order_id' })
+      .select('id, store_id, external_order_id, created_at')
+    if (error) throw new Error(`Vendas: ${error.message}`)
+    for (const o of data ?? []) {
+      idPorPedido.set(`${o.store_id}|${o.external_order_id}`, o.id as string)
+      if (new Date(o.created_at as string).getTime() >= inicio) novosPedidos += 1
+      else pedidosAtualizados += 1
+    }
+    feito += bloco.length
+  }
+
+  // ----------------------------------------------------------------- itens
+  const itens: Record<string, unknown>[] = []
+  for (const n of notas) {
+    const l = lojaDaNota(n)
+    const storeId = idPorLoja.get(`${l.marketplace}|${l.shopId}`)
+    const orderId = storeId ? idPorPedido.get(`${storeId}|${n.order_ref}`) : undefined
+    if (!orderId) continue
+    for (const it of n.itens) {
+      itens.push({
+        order_id: orderId, external_item_id: it.external_item_id || null,
+        sku: it.sku || null, product_name: it.product_name || null,
+        quantity: it.quantity, unit_price: it.unit_price, total_price: it.total_price,
+      })
+    }
+  }
+
+  // Reimportar substitui os itens, não acumula
+  const idsPedidos = [...idPorPedido.values()]
+  feito = 0
+  for (const bloco of pedacos(idsPedidos, LOTE_IDS)) {
+    aoProgredir({ fase: 'Atualizando itens', feito, total: idsPedidos.length })
+    const { error } = await supabase.from('order_items').delete().in('order_id', bloco)
+    if (error) throw new Error(`Itens (limpeza): ${error.message}`)
+    feito += bloco.length
+  }
+  feito = 0
+  for (const bloco of pedacos(itens, LOTE)) {
+    aoProgredir({ fase: 'Gravando itens', feito, total: itens.length })
+    const { error } = await supabase.from('order_items').insert(bloco)
+    if (error) throw new Error(`Itens: ${error.message}`)
+    feito += bloco.length
+  }
+
+  // --------------------------------------------------------------- estoque
+  let estoqueBaixado = 0
+  let semProduto: string[] = []
+  if (descontarEstoque) {
+    aoProgredir({ fase: 'Baixando estoque', feito: 0, total: 1 })
+    const lotes = notas.map((n) => ({
+      // a chave de acesso identifica a nota; o número se repete entre emitentes
+      ref: n.chave_acesso || n.numero_nf,
+      items: n.itens.map((i) => ({ sku: i.sku, qty: i.quantity })),
+    }))
+    const { data, error } = await supabase.rpc('deduct_stock_for_nfes', {
+      p_client: clientId,
+      p_notas: lotes,
+    })
+    if (error) throw new Error(`Estoque: ${error.message}`)
+    const r = (data ?? {}) as { deducted?: number; unknown?: string[] }
+    estoqueBaixado = Number(r.deducted) || 0
+    semProduto = [...new Set(r.unknown ?? [])]
+  }
+
+  const datas = notas.map((n) => n.data_emissao).filter(Boolean).sort() as string[]
+  const semCpf = notas.filter((n) => n.buyer_cpf.length !== 11).length
+
+  return {
+    total_nfes: notas.length,
+    sem_cpf: semCpf,
+    novos_clientes: novosClientes,
+    novos_pedidos: novosPedidos,
+    pedidos_atualizados: pedidosAtualizados,
+    nota_de: datas[0] ?? null,
+    nota_ate: datas[datas.length - 1] ?? null,
+    estoque_baixado: estoqueBaixado,
+    itens_sem_produto: semProduto,
+  }
+}
+
+/** Registra o resumo — e é este insert que desconta o saldo de notas. */
+export async function registrarImportacao(
+  clientId: string,
+  fileName: string,
+  r: ResultadoImportacao,
+): Promise<void> {
+  const { data } = await supabase.auth.getSession()
+  await supabase.from('nfe_imports').insert({
+    client_id: clientId,
+    user_id: data.session?.user.id ?? null,
+    file_name: fileName,
+    status: 'concluido',
+    total_nfes: r.total_nfes,
+    novos_pedidos: r.novos_pedidos,
+    pedidos_atualizados: r.pedidos_atualizados,
+    novos_clientes: r.novos_clientes,
+    sem_cpf: r.sem_cpf,
+    nota_de: r.nota_de,
+    nota_ate: r.nota_ate,
+    finished_at: new Date().toISOString(),
+  })
+}

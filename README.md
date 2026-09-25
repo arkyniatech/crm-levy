@@ -152,8 +152,24 @@ de usar a que você cadastrou.
 
 ## Importar NF-e
 
-Depois do upload, a tela mostra quantas notas foram lidas, quantas eram
-**novas**, quantas **já estavam** no sistema (o fluxo regrava por cima em vez de
+A importação acontece **no navegador**, não no n8n. A tela abre o ZIP (inclusive
+pastas e ZIPs aninhados), lê os XMLs, e grava em lote: uma requisição por bloco
+de 500 linhas, não uma por nota. É a diferença entre segundos e minutos.
+
+Por que aqui e não num serviço: não existe integração externa nessa tarefa — é
+descompactar, ler e gravar. Passar o arquivo por um servidor só acrescentaria
+uma viagem e um lugar a mais para quebrar. E quem processa é quem está olhando,
+então a barra de progresso é real.
+
+Rode `supabase/importacao-pelo-navegador.sql` (policies de escrita) e
+`supabase/stock-nfe-lote.sql` (baixa de estoque em lote).
+
+A aba fica processando enquanto roda: fechar interrompe. Como toda gravação é
+upsert por chave, recomeçar é seguro — refaz o que faltou sem duplicar.
+
+### O que ficou para trás
+
+A tela mostra quantas notas foram lidas, quantas eram **novas**, quantas **já estavam** no sistema (o fluxo regrava por cima em vez de
 duplicar) e o período de emissão do lote. Quando nada novo entra, ela diz isso
 explicitamente — é o caso comum de reenviar um arquivo já importado.
 
